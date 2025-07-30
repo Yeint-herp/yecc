@@ -37,3 +37,4 @@
 
 Chronological and logical order of modules of the compiler:
 - Arena allocator module: `arena.h` `arena.c`
+- Hashmap module: `map.h`
