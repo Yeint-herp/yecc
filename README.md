@@ -36,3 +36,4 @@
   * This helps users understand not only how to build a compiler, but also how to make one that is user-friendly and robust.
 
 Chronological and logical order of modules of the compiler:
+- Arena allocator module: `arena.h` `arena.c`
