@@ -3,59 +3,82 @@
 #include <stdlib.h>
 #include <string.h>
 
-static constexpr size_t alignment = sizeof(void *);  // align to pointer size
+enum { ALIGNMENT = sizeof(void *) };
 
-bool arena_init(struct arena *arena, size_t initial_size) {
-	assert(arena != nullptr);
+static size_t align_up(size_t n) { return (n + (ALIGNMENT - 1)) & ~(ALIGNMENT - 1); }
 
-	size_t aligned = (initial_size + alignment - 1) & ~(alignment - 1);
+static struct arena_block *make_block(size_t min_size) {
+	struct arena_block *blk = malloc(sizeof *blk);
+	if (!blk)
+		return nullptr;
 
-	arena->data = malloc(aligned);
-	memset(arena->data, 0, aligned);
-	if (!arena->data) {
-		arena->capacity = 0;
-		arena->used = 0;
-		return false;
+	blk->capacity = align_up(min_size);
+	blk->used = 0;
+	blk->next = nullptr;
+
+	blk->data = malloc(blk->capacity);
+	if (!blk->data) {
+		free(blk);
+		return nullptr;
 	}
-	arena->capacity = aligned;
-	arena->used = 0;
+	memset(blk->data, 0, blk->capacity);
+	return blk;
+}
+
+bool arena_init(struct arena *arena, size_t default_size) {
+	assert(arena != nullptr);
+	
+	arena->first = nullptr;
+	arena->current = nullptr;
+	arena->block_size = (default_size > 0 ? default_size : 1024);
+
+	arena->first = make_block(arena->block_size);
+	if (!arena->first)
+		return false;
+
+	arena->current = arena->first;
 	return true;
 }
 
 void *arena_alloc(struct arena *arena, size_t size) {
 	assert(arena != nullptr);
-	assert(size != 0);
+	assert(size > 0);
 
-	size_t aligned = (size + alignment - 1) & ~(alignment - 1);
+	size_t needed = align_up(size);
 
-	if (arena->used + aligned > arena->capacity)
-		return nullptr; // OOM
+	if (arena->current->used + needed <= arena->current->capacity) {
+		void *ptr = (char *)arena->current->data + arena->current->used;
+		arena->current->used += needed;
+		return ptr;
+	}
 
-	void *ptr = arena->data + arena->used;
-	arena->used += aligned;
-	return ptr;
+	size_t new_size = arena->block_size;
+	if (needed > new_size)
+		new_size = needed;
+
+	struct arena_block *blk = make_block(new_size);
+	if (!blk)
+		return nullptr;
+
+	arena->current->next = blk;
+	arena->current = blk;
+
+	blk->used = needed;
+	return blk->data;
 }
 
 void arena_destroy(struct arena *arena) {
-	if (arena->data)
-		free(arena->data);
-
-	arena->data = nullptr;
-	arena->capacity = 0;
-	arena->used = 0;
-}
-
-bool arena_realloc(struct arena *arena, size_t new_capacity) {
 	assert(arena != nullptr);
 
-	if (new_capacity <= arena->capacity)
-		return true; // already large enough
+	struct arena_block *blk = arena->first;
+	while (blk) {
+		struct arena_block *next = blk->next;
+		free(blk->data);
+		free(blk);
+		blk = next;
+	}
 
-	unsigned char *new_data = realloc(arena->data, new_capacity);
-	if (!new_data)
-		return false;
-
-	arena->data = new_data;
-	arena->capacity = new_capacity;
-	return true;
+	arena->first = nullptr;
+	arena->current = nullptr;
+	arena->block_size = 0;
 }

@@ -1,29 +1,54 @@
 #ifndef ARENA_H
 #define ARENA_H
 
-/*
- * arena.h
- * Basic arena allocator for bulk, cache friendly allocations.
- */
-
 #include <stdbool.h>
 #include <stddef.h>
 
-struct arena {
-	size_t capacity, used;
-	unsigned char *data;
+/*
+ * arena.h
+ *
+ * Segmented arena allocator for fast, linear allocation
+ * without ever invalidating earlier pointers (important!).
+ *
+ */
+
+struct arena_block {
+	void *data;
+	size_t capacity;
+	size_t used;
+	struct arena_block *next;
 };
 
-/* Initializes arena to be able to allocate initial_size */
-bool arena_init(struct arena *arena, size_t initial_size);
+struct arena {
+	struct arena_block *first;
+	struct arena_block *current;
+	size_t block_size;
+};
 
-/* allocates size bytes from arena and returns a pointer to its start, nullptr on OOM */
+/**
+ * Initialize an arena.
+ *
+ * @param arena        Non-null pointer to arena struct to initialize.
+ * @param default_size Minimum size for each new block.
+ * @return             true on success, false if initial malloc fails.
+ */
+bool arena_init(struct arena *arena, size_t default_size);
+
+/**
+ * Allocate `size` bytes from the arena.
+ *
+ * @param arena Non-null pointer to an initialized arena.
+ * @param size  Number of bytes to allocate; must be >0.
+ * @return      Pointer to the allocated memory, or nullptr on OOM.
+ */
 void *arena_alloc(struct arena *arena, size_t size);
 
-/* frees all memory owned by arena */
+/**
+ * Destroy an arena and free all its blocks.
+ *
+ * @param arena Non-null pointer to arena previously passed to arena_init.
+ *              After call, arena is reset as-if zeroed out.
+ */
 void arena_destroy(struct arena *arena);
 
-/* reallocates the arena to new_capacity, false on failure */
-bool arena_realloc(struct arena *arena, size_t new_capacity);
-
-#endif /* ARENA_H */
+#endif // ARENA_H
