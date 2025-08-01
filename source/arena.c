@@ -3,7 +3,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-enum { ALIGNMENT = sizeof(void *) };
+constexpr size_t ALIGNMENT = sizeof(void *);
 
 static size_t align_up(size_t n) { return (n + (ALIGNMENT - 1)) & ~(ALIGNMENT - 1); }
 

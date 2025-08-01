@@ -60,4 +60,4 @@ void arena_destroy(struct arena *arena);
  */
 char *arena_strdup(struct arena *arena, const char *s);
 
-#endif // ARENA_H
+#endif /* ARENA_H */
