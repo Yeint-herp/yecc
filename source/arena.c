@@ -27,7 +27,7 @@ static struct arena_block *make_block(size_t min_size) {
 
 bool arena_init(struct arena *arena, size_t default_size) {
 	assert(arena != nullptr);
-	
+
 	arena->first = nullptr;
 	arena->current = nullptr;
 	arena->block_size = (default_size > 0 ? default_size : 1024);
@@ -81,4 +81,17 @@ void arena_destroy(struct arena *arena) {
 	arena->first = nullptr;
 	arena->current = nullptr;
 	arena->block_size = 0;
+}
+
+char *arena_strdup(struct arena *arena, const char *s) {
+	assert(arena != nullptr);
+	assert(s != nullptr);
+
+	size_t len = strlen(s) + 1;
+	char *copy = arena_alloc(arena, len);
+	if (!copy)
+		return nullptr;
+
+	memcpy(copy, s, len);
+	return copy;
 }

@@ -51,4 +51,13 @@ void *arena_alloc(struct arena *arena, size_t size);
  */
 void arena_destroy(struct arena *arena);
 
+/**
+ * Duplicate a null-terminated string into the arena.
+ *
+ * @param arena Non-null pointer to an initialized arena.
+ * @param s     Null-terminated string to duplicate.
+ * @return      Pointer to duplicated string in arena, or nullptr on OOM.
+ */
+char *arena_strdup(struct arena *arena, const char *s);
+
 #endif // ARENA_H
