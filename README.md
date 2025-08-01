@@ -39,4 +39,5 @@ Chronological and logical order of modules of the compiler:
 - Arena allocator module: `arena.h` `arena.c`
 - Hashmap module: `map.h`
 - Vector (dynamic array) module: `vector.h`
+- Deque module: `deque.h`
 - String interner module `string_intern.h` `string_intern.c`
