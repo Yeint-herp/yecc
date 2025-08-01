@@ -12,7 +12,7 @@
  * Generic open-addressing hash map designed for separately allocated key/value storage.
  *
  * Linear probing is used to handle hash conflicts.
- * Keys and values are stored in separate memory blocks for optimial cash layout.
+ * Keys and values are stored in separate memory blocks for optimial cache layout.
  * Bucket status metadata is bit-packed (2 bits per bucket) to reduce overhead.
  */
 
@@ -65,7 +65,7 @@ enum bucket_status : uint8_t {
 		size_t __map_i = __map_hash % __map_cap;                                                                       \
 		size_t __map_first_grave = SIZE_MAX;                                                                           \
 		bool __map_found = false;                                                                                      \
-		LOG("MAP_FIND start key=%p hash=%zu cap=%zu", (void *)(uintptr_t)(key), (size_t)__map_hash, __map_cap);        \
+		LOG("MAP_FIND start hash=%zu cap=%zu", (size_t)__map_hash, __map_cap);                                         \
 		for (;;) {                                                                                                     \
 			uint8_t __map_status = GET_STATUS((m)->status_bits, __map_i);                                              \
 			LOG(" MAP_FIND probe idx=%zu status=%u", __map_i, __map_status);                                           \
@@ -181,11 +181,11 @@ enum bucket_status : uint8_t {
 		V *values;                                                                                                     \
 		uint8_t *status_bits;                                                                                          \
 		size_t capacity, size, graves;                                                                                 \
-		bool (*compare)(K a, K b);                                                                                     \
-		uintptr_t (*hash)(K a);                                                                                        \
+		bool (*compare)(const K a, const K b);                                                                         \
+		uintptr_t (*hash)(const K a);                                                                                  \
 	}
 
-/* initialized a hashmap to the default capacity with a given key compare and key hash function */
+/* initializes a hashmap to the default capacity with a given key compare and key hash function */
 #define map_init(m, cmp, hfn)                                                                                          \
 	({                                                                                                                 \
 		__label__ free_vals;                                                                                           \
@@ -227,15 +227,18 @@ done:                                                                           
 		_ok;                                                                                                           \
 	})
 
+#define MAP_PUT_NEW 0
+#define MAP_PUT_OVERWRITE 1
+#define MAP_PUT_OOM 2
+
 /*
  * map_put:      insert or overwrite;
- *               returns 0 if new insertion,
- *                       1 if you just overwrote an existing key,
- *                       2 if OOM during possible resize.
+ *               returns MAP_PUT_NEW if new insertion,
+ *                       MAP_PUT_OVERWRITE if you just overwrote an existing key,
+ *                       MAP_PUT_OOM if OOM during possible resize.
  */
 #define map_put(m, key, value)                                                                                         \
 	({                                                                                                                 \
-		LOG("map_put: key=%p value=%p", (void *)(uintptr_t)(key), (void *)(uintptr_t)(value));                         \
 		int _out;                                                                                                      \
 		size_t _idx;                                                                                                   \
 		bool _fnd = false;                                                                                             \
@@ -243,11 +246,11 @@ done:                                                                           
 		if (_fnd) {                                                                                                    \
 			LOG(" map_put: overwrite at %zu", _idx);                                                                   \
 			(m)->values[_idx] = (value);                                                                               \
-			_out = 1;                                                                                                  \
+			_out = MAP_PUT_OVERWRITE;                                                                                  \
 		} else {                                                                                                       \
 			if (!MAP_MAYBE_REHASH((m))) {                                                                              \
 				LOG(" map_put: resize failed");                                                                        \
-				_out = 2;                                                                                              \
+				_out = MAP_PUT_OOM;                                                                                    \
 			} else {                                                                                                   \
 				MAP_FIND((m), (key), &_idx, &_fnd);                                                                    \
 				if (GET_STATUS((m)->status_bits, _idx) == BUCKET_STATUS_GRAVE) {                                       \
@@ -259,7 +262,7 @@ done:                                                                           
 				SET_STATUS((m)->status_bits, _idx, BUCKET_STATUS_FULL);                                                \
 				(m)->size++;                                                                                           \
 				LOG(" map_put: inserted at %zu, new size=%zu", _idx, (m)->size);                                       \
-				_out = 0;                                                                                              \
+				_out = MAP_PUT_NEW;                                                                                    \
 			}                                                                                                          \
 		}                                                                                                              \
 		_out;                                                                                                          \
@@ -270,18 +273,11 @@ done:                                                                           
  */
 #define map_get(m, key)                                                                                                \
 	({                                                                                                                 \
-		LOG("map_get: key=%p", (void *)(uintptr_t)(key));                                                              \
+		const __typeof__((m)->keys[0]) _k = (key);                                                                     \
 		size_t _idx;                                                                                                   \
 		bool _fnd = false;                                                                                             \
-		MAP_FIND((m), (key), &_idx, &_fnd);                                                                            \
-		typeof((m)->values) _res;                                                                                      \
-		if (_fnd) {                                                                                                    \
-			LOG(" map_get: found at %zu", _idx);                                                                       \
-			_res = &((m)->values[_idx]);                                                                               \
-		} else {                                                                                                       \
-			LOG(" map_get: not found");                                                                                \
-			_res = nullptr;                                                                                            \
-		}                                                                                                              \
+		MAP_FIND((m), _k, &_idx, &_fnd);                                                                               \
+		__typeof__(&(m)->values[0]) _res = _fnd ? &((m)->values[_idx]) : nullptr;                                      \
 		_res;                                                                                                          \
 	})
 
@@ -290,7 +286,6 @@ done:                                                                           
  */
 #define map_remove(m, key)                                                                                             \
 	({                                                                                                                 \
-		LOG("map_remove: key=%p", (void *)(uintptr_t)(key));                                                           \
 		size_t _idx;                                                                                                   \
 		bool _fnd = false;                                                                                             \
 		MAP_FIND((m), (key), &_idx, &_fnd);                                                                            \
@@ -308,10 +303,126 @@ done:                                                                           
 		_res;                                                                                                          \
 	})
 
+/*
+ * map_foreach: iterates over all occupied slots in map m.
+ * Automatically declares `key` and `val`
+ */
 #define map_foreach(m, kvar, vvar)                                                                                     \
 	for (size_t __i = 0; __i < (m)->capacity; ++__i)                                                                   \
-		if (GET_STATUS((m)->status_bits, __i) == BUCKET_STATUS_FULL &&                                                 \
-			(((kvar) = (m)->keys[__i]), ((vvar) = (m)->values[__i]), true))
+		if (GET_STATUS((m)->status_bits, __i) == BUCKET_STATUS_FULL)                                                   \
+			for (typeof((m)->keys[0]) *kvar = &(m)->keys[__i]; kvar; kvar = nullptr)                                   \
+				for (typeof((m)->values[0]) *vvar = &(m)->values[__i]; vvar; vvar = nullptr)
+
+/*
+ * map_contains: returns true if key is present in the map, false otherwise.
+ */
+#define map_contains(m, key)                                                                                           \
+	({                                                                                                                 \
+		size_t _idx;                                                                                                   \
+		bool _fnd = false;                                                                                             \
+		MAP_FIND((m), (key), &_idx, &_fnd);                                                                            \
+		_fnd;                                                                                                          \
+	})
+
+/*
+ * map_get_or: returns value for key, or fallback value if not found.
+ */
+#define map_get_or(m, key, fallback)                                                                                   \
+	({                                                                                                                 \
+		typeof((m)->values[0]) *_v = map_get((m), (key));                                                              \
+		(_v ? *_v : (fallback));                                                                                       \
+	})
+
+/*
+ * map_clone: shallowly clone an existing map 'src' into map 'dst'.
+ * Allocates fresh storage and copies all keys, values, and status bits.
+ *
+ * Returns true on success, false on OOM. The destination map must be uninitialized.
+ */
+#define map_clone(dst, src)                                                                                            \
+	({                                                                                                                 \
+		bool _ok = false;                                                                                              \
+		LOG("map_clone: from=%p to=%p", (src), (dst));                                                                 \
+		size_t _cap = (src)->capacity;                                                                                 \
+		size_t _bytes = ((_cap * 2) + 7) / 8;                                                                          \
+		(dst)->keys = malloc(_cap * sizeof *(src)->keys);                                                              \
+		(dst)->values = malloc(_cap * sizeof *(src)->values);                                                          \
+		(dst)->status_bits = malloc(_bytes);                                                                           \
+		if ((dst)->keys && (dst)->values && (dst)->status_bits) {                                                      \
+			memcpy((dst)->keys, (src)->keys, _cap * sizeof *(src)->keys);                                              \
+			memcpy((dst)->values, (src)->values, _cap * sizeof *(src)->values);                                        \
+			memcpy((dst)->status_bits, (src)->status_bits, _bytes);                                                    \
+			(dst)->capacity = (src)->capacity;                                                                         \
+			(dst)->size = (src)->size;                                                                                 \
+			(dst)->graves = (src)->graves;                                                                             \
+			(dst)->compare = (src)->compare;                                                                           \
+			(dst)->hash = (src)->hash;                                                                                 \
+			_ok = true;                                                                                                \
+			LOG("map_clone: success");                                                                                 \
+		} else {                                                                                                       \
+			LOG("map_clone: OOM");                                                                                     \
+			free((dst)->keys);                                                                                         \
+			free((dst)->values);                                                                                       \
+			free((dst)->status_bits);                                                                                  \
+		}                                                                                                              \
+		_ok;                                                                                                           \
+	})
+
+/*
+ * map_clone_deep: clone map 'src' into map 'dst' using deep copy.
+ * Requires `key_dup` and `val_dup` functions that take `src` elements and return heap-allocated copies.
+ * Returns true on success, false on failure (dst is left empty if so).
+ */
+#define map_clone_deep(dst, src, key_dup, val_dup)                                                                     \
+	({                                                                                                                 \
+		bool _ok = false;                                                                                              \
+		LOG("map_clone_deep: from=%p to=%p", (src), (dst));                                                            \
+		if (map_init((dst), (src)->compare, (src)->hash)) {                                                            \
+			bool _fail = false;                                                                                        \
+			for (size_t __i = 0; __i < (src)->capacity; ++__i) {                                                       \
+				if (GET_STATUS((src)->status_bits, __i) == BUCKET_STATUS_FULL) {                                       \
+					typeof((src)->keys[0]) _k = key_dup((src)->keys[__i]);                                             \
+					typeof((src)->values[0]) _v = val_dup((src)->values[__i]);                                         \
+					if (map_put((dst), _k, _v) == MAP_PUT_OOM) {                                                       \
+						LOG("map_clone_deep: insertion failed at %zu", __i);                                           \
+						_fail = true;                                                                                  \
+						break;                                                                                         \
+					}                                                                                                  \
+				}                                                                                                      \
+			}                                                                                                          \
+			if (_fail) {                                                                                               \
+				map_destroy((dst));                                                                                    \
+			} else {                                                                                                   \
+				_ok = true;                                                                                            \
+				LOG("map_clone_deep: success");                                                                        \
+			}                                                                                                          \
+		}                                                                                                              \
+		_ok;                                                                                                           \
+	})
+
+/*
+ * map_transform: transform entries from map 'src' into map 'dst' using conversion functions key_conv(src_key) ->
+ * dst_key and val_conv(src_val) -> dst_val. Both maps must already be initialized.  Returns true on success, false if
+ * any insertion fails (OOM).
+ */
+#define map_transform(dst, src, key_conv, val_conv)                                                                    \
+	({                                                                                                                 \
+		bool _ok = true;                                                                                               \
+		for (size_t _i = 0; _i < (src)->capacity; ++_i) {                                                              \
+			if (GET_STATUS((src)->status_bits, _i) == BUCKET_STATUS_FULL) {                                            \
+				typeof((src)->keys[0]) _sk = (src)->keys[_i];                                                          \
+				typeof((src)->values[0]) _sv = (src)->values[_i];                                                      \
+				typeof((dst)->keys[0]) _dk = (key_conv)(_sk);                                                          \
+				typeof((dst)->values[0]) _dv = (val_conv)(_sv);                                                        \
+				int _r = map_put((dst), _dk, _dv);                                                                     \
+				if (_r == MAP_PUT_OOM) {                                                                               \
+					_ok = false;                                                                                       \
+					break;                                                                                             \
+				}                                                                                                      \
+			}                                                                                                          \
+		}                                                                                                              \
+		_ok;                                                                                                           \
+	})
 
 /*
  * map_clear: reset to empty (keeps the current capacity)
