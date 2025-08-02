@@ -41,3 +41,4 @@ Chronological and logical order of modules of the compiler:
 - Vector (dynamic array) module: `vector.h`
 - Deque module: `deque.h`
 - String interner module `string_intern.h` `string_intern.c`
+- File streamer module: `streamer.c` `streamer.h`
