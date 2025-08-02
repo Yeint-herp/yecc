@@ -6,13 +6,8 @@
 #include <stdint.h>
 #include <stdio.h>
 
-/**
- * streamer.h
- *
- * A simple buffered byte‐stream reader for files or in-memory buffers.
- */
-
 #define STREAMER_BUFFER_SIZE 8192
+#define STREAMER_PUSHBACK_DEPTH 8
 
 struct source_position {
 	const char *filename;
@@ -28,44 +23,51 @@ struct streamer {
 	const char *filename;
 	FILE *handle;
 
-	const uint8_t buffer[STREAMER_BUFFER_SIZE];
-	size_t buffer_offset; /* << buffer offset inside buffer */
-	size_t buffer_loc;	  /* << offset in file where buffer starts */
+	/* main file buffer */
+	uint8_t buffer[STREAMER_BUFFER_SIZE];
+	size_t buffer_start; /* file‐offset of buffer[0] */
+	size_t buffer_len;	 /* bytes actually in buffer */
+	size_t buffer_pos;	 /* next index in buffer[] to read */
 
-	size_t len;			 /* << full file length */
-	size_t pos;			 /* << real in-file position in bytes */
-	size_t line, column; /* read in-file line and column */
+	size_t len;			 /* total file length */
+	size_t pos;			 /* absolute file offset = buffer_start + buffer_pos */
+	size_t line, column; /* current line/column */
+
+	/* multi‐char pushback stack */
+	uint8_t pushback_buf[STREAMER_PUSHBACK_DEPTH];
+	size_t pushback_len;
+	size_t pushback_line[STREAMER_PUSHBACK_DEPTH];
+	size_t pushback_column[STREAMER_PUSHBACK_DEPTH];
+
+	/* last‐read character & its position (for unget) */
+	uint8_t last_char;
+	size_t prev_line, prev_column;
 };
 
-/**
- * A small window around the current byte:
- *  cache[0..4] holds: 2 bytes before, the current byte, and 2 bytes after.
- */
+/* open a file‐backed streamer */
+bool streamer_open(struct streamer *s, const char *filename);
+/* close the streamer */
+void streamer_close(struct streamer *s);
+
+/* absolute seek (byte offset), recomputes line/col, clears pushback */
+bool streamer_seek(struct streamer *s, size_t offset);
+/* push back the last character read (up to STREAMER_PUSHBACK_DEPTH deep) */
+bool streamer_unget(struct streamer *s);
+
+/* peek at next byte without consuming; returns 0..255, or -1 on EOF/error */
+int streamer_peek(struct streamer *s);
+/* read & consume next byte (advances line/col); returns 0..255, or -1 on EOF/error */
+int streamer_next(struct streamer *s);
+
+/* grab a 5‐byte context window around the current pos */
 struct streamer_blob {
 	uint8_t cache[5];
 };
-
-/* open a file-backed streamer */
-bool streamer_open(struct streamer *s, const char *filename);
-/* close a file-backed streamer and free internal state */
-void streamer_close(struct streamer *s);
-
-/* move the read position to absolute byte offset */
-bool streamer_seek(struct streamer *s, size_t offset);
-/* push the read position back by one byte */
-bool streamer_unget(struct streamer *s);
-
-/* peek at the next byte without advancing */
-uint8_t streamer_peek(struct streamer *s);
-/* read and consume the next byte */
-uint8_t streamer_next(struct streamer *s);
-
-/* retrieve a 5-byte context blob around the current pos */
 struct streamer_blob streamer_get_blob(struct streamer *s);
 
-/* get the current source_position (filename, line, column, offset) */
-struct source_position streamer_position(struct streamer *s);
-/* test for end-of-file */
-bool streamer_eof(struct streamer *s);
+/* report filename/line/col/offset */
+struct source_position streamer_position(const struct streamer *s);
+/* true if we've passed EOF */
+bool streamer_eof(const struct streamer *s);
 
 #endif /* STREAMER_H */
