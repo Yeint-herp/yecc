@@ -35,6 +35,8 @@
   * The compiler attempts to recover from common syntax and semantic errors where appropriate.
   * This helps users understand not only how to build a compiler, but also how to make one that is user-friendly and robust.
 
+* **No typedef for structs**
+
 Chronological and logical order of modules of the compiler:
 - Arena allocator module: `arena.h` `arena.c`
 - Hashmap module: `map.h`
@@ -43,3 +45,4 @@ Chronological and logical order of modules of the compiler:
 - String interner module: `string_intern.h` `string_intern.c`
 - File streamer module: `streamer.c` `streamer.h`
 - Error diagnostics module: `diag.h` `diag.c`
+- Token module: `token.h`
