@@ -115,6 +115,19 @@
 		(v)->size--;                                                                                                   \
 	} while (0)
 
+#define vector_move(dest, src)                                                                                         \
+	do {                                                                                                               \
+		free((dest)->data);                                                                                            \
+                                                                                                                       \
+		(dest)->data = (src)->data;                                                                                    \
+		(dest)->size = (src)->size;                                                                                    \
+		(dest)->capacity = (src)->capacity;                                                                            \
+                                                                                                                       \
+		(src)->data = nullptr;                                                                                         \
+		(src)->size = 0;                                                                                               \
+		(src)->capacity = 0;                                                                                           \
+	} while (0)
+
 #define vector_size(v) ((v)->size)
 #define vector_capacity(v) ((v)->capacity)
 #define vector_empty(v) ((v)->size == 0)
