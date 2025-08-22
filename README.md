@@ -38,6 +38,7 @@
 * **No typedef for structs**
 
 Chronological and logical order of modules of the compiler:
+- Utilities module `utils.h`
 - Arena allocator module: `arena.h` `arena.c`
 - Hashmap module: `map.h`
 - Vector (dynamic array) module: `vector.h`
@@ -46,3 +47,4 @@ Chronological and logical order of modules of the compiler:
 - File streamer module: `streamer.c` `streamer.h`
 - Error diagnostics module: `diag.h` `diag.c`
 - Token module: `token.h`
+- Compiler global state context module `context.h` `context.c`
