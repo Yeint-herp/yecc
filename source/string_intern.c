@@ -14,14 +14,15 @@ static struct arena string_intern_arena = {};
 map_of(struct string_intern_key, const char *) string_intern_map = {};
 
 /* implemented according to https://en.wikipedia.org/wiki/Fowler%E2%80%93Noll%E2%80%93Vo_hash_function */
-/* thanks to struct string_intern_key we save on strlen per hash */
+/* thanks to struct string_intern_key we save one strlen per hash */
 static uintptr_t si_hash_string(const struct string_intern_key sid) {
 	constexpr uintptr_t fnv1a_offset_basis = 0xcbf29ce484222325;
 	constexpr uintptr_t fnv1a_prime = 0x100000001b3;
 
 	uintptr_t hash = fnv1a_offset_basis;
+	const uint8_t *p = (const uint8_t *)sid.string;
 	for (size_t i = 0; i < sid.len; i++) {
-		hash ^= sid.string[i];
+		hash ^= (uintptr_t)p[i];
 		hash *= fnv1a_prime;
 	}
 
@@ -29,37 +30,35 @@ static uintptr_t si_hash_string(const struct string_intern_key sid) {
 }
 
 static bool si_compare_string(const struct string_intern_key a, const struct string_intern_key b) {
-	if (a.len != b.len)
-		return false;
-	if (memcmp(a.string, b.string, a.len) == 0)
-		return true;
-	return false;
+	return a.len == b.len && memcmp(a.string, b.string, a.len) == 0;
 }
 
-const char *intern(const char *str) {
+void intern_init() {
+	if (string_intern_arena.first == nullptr)
+		arena_init(&string_intern_arena, 4096);
+	if (string_intern_map.keys == nullptr)
+		map_init(&string_intern_map, si_compare_string, si_hash_string);
+}
+
+const char *intern_n(const char *str, size_t len) {
 	assert(str != nullptr);
 
-	if (__builtin_expect(string_intern_arena.first == nullptr, 0)) {
-		arena_init(&string_intern_arena, 4096);
-		map_init(&string_intern_map, si_compare_string, si_hash_string);
-	}
-
-	const size_t len = strlen(str);
-	const struct string_intern_key sid = {.len = len, .string = str};
-
-	const char **found = map_get(&string_intern_map, sid);
-	if (!found) {
-		char *underlying = arena_strdup(&string_intern_arena, str);
-
-		int res = map_put(&string_intern_map, sid, underlying);
-		assert(res != MAP_PUT_OVERWRITE && "Somehow overwrote a value not found in lookup (race condition?)");
-		assert(res != MAP_PUT_OOM && "OOM when trying to resize hashmap!");
-
-		return underlying;
-	} else {
+	const struct string_intern_key probe = {.len = len, .string = str};
+	const char **found = map_get(&string_intern_map, probe);
+	if (found)
 		return *found;
-	}
+
+	char *underlying = arena_strdup(&string_intern_arena, str);
+	struct string_intern_key key = {.string = underlying, .len = len};
+
+	int res = map_put(&string_intern_map, key, underlying);
+	assert(res != MAP_PUT_OVERWRITE && "Somehow overwrote a value not found in lookup (race condition?)");
+	assert(res != MAP_PUT_OOM && "OOM when trying to resize hashmap!");
+
+	return underlying;
 }
+
+const char *intern(const char *str) { return intern_n(str, strlen(str)); }
 
 void intern_destroy(void) {
 	map_destroy(&string_intern_map);

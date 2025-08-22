@@ -58,6 +58,7 @@ enum bucket_status : uint8_t {
  *   – the slot where key was found (and *out_found == true),
  *   – or the first grave seen (if any), or the first empty bucket (if no grave).
  */
+/* drop-in replacement for MAP_FIND with full-cycle termination */
 #define MAP_FIND(m, key, out_idx, out_found)                                                                           \
 	do {                                                                                                               \
 		size_t __map_cap = (m)->capacity;                                                                              \
