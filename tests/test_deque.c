@@ -4,11 +4,11 @@
 #include <stdlib.h>
 
 #define RUN(test)                                                                                                      \
-do {                                                                                                               \
-	printf("%-35s", #test);                                                                                        \
-	test();                                                                                                        \
-	puts("OK");                                                                                                    \
-} while (0)
+	do {                                                                                                               \
+		printf("%-35s", #test);                                                                                        \
+		test();                                                                                                        \
+		puts("OK");                                                                                                    \
+	} while (0)
 
 #define ASSERT(expr) assert(expr)
 
@@ -24,7 +24,7 @@ static void test_deque_init_destroy(void) {
 	ASSERT(d.head == 0);
 
 	deque_destroy(&d);
-	
+
 	ASSERT(d.data == nullptr);
 	ASSERT(d.capacity == 0);
 	ASSERT(d.size == 0);
