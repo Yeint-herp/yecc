@@ -90,8 +90,8 @@ static void test_peek_next_eof(void) {
 
 	// now at EOF
 	ASSERT(streamer_eof(&s));
-	ASSERT(streamer_peek(&s) == 0);
-	ASSERT(streamer_next(&s) == 0);
+	ASSERT(streamer_peek(&s) == -1);
+	ASSERT(streamer_next(&s) == -1);
 
 	streamer_close(&s);
 	free(ps);
@@ -201,7 +201,7 @@ int main(void) {
 	g_tmpdir = mkdtemp(tmpdir_template);
 	ASSERT(g_tmpdir);
 
-    puts("\n=== STREAMER Functional Tests ===");
+	puts("\n=== STREAMER Functional Tests ===");
 
 	RUN(test_open_close);
 	RUN(test_peek_next_eof);
@@ -209,7 +209,7 @@ int main(void) {
 	RUN(test_blob);
 	RUN(test_buffer_refill);
 
-    puts("\nAll tests passed successfully!");
+	puts("\nAll tests passed successfully!");
 	rmdir(g_tmpdir);
 	return 0;
 }

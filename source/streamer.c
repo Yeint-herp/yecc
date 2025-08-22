@@ -143,10 +143,15 @@ bool streamer_unget(struct streamer *s) {
 		s->buffer_pos = s->pos - s->buffer_start;
 	}
 
+	uint8_t c = s->buffer[s->buffer_pos];
+
 	size_t idx = s->pushback_len++;
-	s->pushback_buf[idx] = s->last_char;
-	s->pushback_line[idx] = s->prev_line;
-	s->pushback_column[idx] = s->prev_column;
+	s->pushback_buf[idx] = c;
+
+	s->pushback_line[idx] = s->line;
+	s->pushback_column[idx] = s->column;
+
+	s->last_char = c;
 
 	return true;
 }
