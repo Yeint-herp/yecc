@@ -28,6 +28,7 @@ static const char *lvl_str(diag_level l) {
 	}
 	return "unknown";
 }
+
 static const char *lvl_color(diag_level l) {
 	switch (l) {
 	case DIAG_LEVEL_ERROR:
@@ -46,6 +47,7 @@ static char *read_line(const char *fn, size_t want) {
 	FILE *f = fopen(fn, "r");
 	if (!f)
 		return nullptr;
+
 	char *buf = nullptr;
 	size_t cap = 0;
 	ssize_t len;
@@ -63,7 +65,7 @@ static char *read_line(const char *fn, size_t want) {
 	return nullptr;
 }
 
-static void print_context_msg(struct source_span sp, const char *label, const char *message) {
+static void print_context_vmsg(struct source_span sp, diag_level lvl, const char *fmt, va_list ap_in) {
 	size_t start = sp.start.line;
 	size_t end = sp.end.line < start ? start : sp.end.line;
 
@@ -77,6 +79,8 @@ static void print_context_msg(struct source_span sp, const char *label, const ch
 		if (w > width)
 			width = w;
 	}
+
+	bool message_printed = false;
 
 	for (size_t ln = start; ln <= end; ln++) {
 		char *src = read_line(sp.start.filename, ln);
@@ -93,17 +97,30 @@ static void print_context_msg(struct source_span sp, const char *label, const ch
 		fprintf(stderr, " %*s | ", (int)width, "");
 		for (size_t i = 1; i < col0; i++)
 			fputc(' ', stderr);
+
 		fputc('^', stderr);
 		for (size_t i = col0 + 1; i < col1; i++)
 			fputc('-', stderr);
 		fputc('>', stderr);
 
-		if (ln == sp.start.line && label && message) {
+		if (!message_printed && ln == sp.start.line) {
 			fputc(' ', stderr);
-			fprintf(stderr, "%s %s", label, message);
-		}
-		fputc('\n', stderr);
 
+			if (diag_use_color) {
+				fprintf(stderr, "%s%s:%s ", lvl_color(lvl), lvl_str(lvl), ANSI_RESET);
+			} else {
+				fprintf(stderr, "%s: ", lvl_str(lvl));
+			}
+
+			va_list ap;
+			va_copy(ap, ap_in);
+			vfprintf(stderr, fmt, ap);
+			va_end(ap);
+
+			message_printed = true;
+		}
+
+		fputc('\n', stderr);
 		free(src);
 	}
 }
@@ -117,7 +134,7 @@ void diag_init(void) {
 		diag_use_color = true;
 }
 
-static void diag_vreport(diag_level lvl, struct source_span sp, const char *fmt, va_list ap) {
+static void diag_reportv(diag_level lvl, struct source_span sp, const char *fmt, va_list ap) {
 	if (!diag_inited)
 		diag_init();
 
@@ -128,56 +145,52 @@ static void diag_vreport(diag_level lvl, struct source_span sp, const char *fmt,
 	}
 	fprintf(stderr, "%s:%zu:%zu\n", sp.start.filename, sp.start.line, sp.start.column);
 
-	char labelbuf[64];
-	const char *col = diag_use_color ? lvl_color(lvl) : "";
-	const char *rcol = diag_use_color ? ANSI_RESET : "";
-	snprintf(labelbuf, sizeof(labelbuf), "%s%s:%s", col, lvl_str(lvl), rcol);
+	print_context_vmsg(sp, lvl, fmt, ap);
+}
 
-	char msgbuf[1024];
-	vsnprintf(msgbuf, sizeof(msgbuf), fmt, ap);
+void diag_errorv(struct source_span s, const char *fmt, va_list ap) { diag_reportv(DIAG_LEVEL_ERROR, s, fmt, ap); }
+void diag_warningv(struct source_span s, const char *fmt, va_list ap) { diag_reportv(DIAG_LEVEL_WARNING, s, fmt, ap); }
+void diag_notev(struct source_span s, const char *fmt, va_list ap) { diag_reportv(DIAG_LEVEL_NOTE, s, fmt, ap); }
+void diag_infov(struct source_span s, const char *fmt, va_list ap) { diag_reportv(DIAG_LEVEL_INFO, s, fmt, ap); }
 
-	print_context_msg(sp, labelbuf, msgbuf);
+void diag_contextv(diag_level lvl, struct source_span s, const char *fmt, va_list ap) {
+	if (!diag_inited)
+		diag_init();
+
+	print_context_vmsg(s, lvl, fmt, ap);
 }
 
 void diag_error(struct source_span s, const char *fmt, ...) {
 	va_list ap;
 	va_start(ap, fmt);
-	diag_vreport(DIAG_LEVEL_ERROR, s, fmt, ap);
+	diag_errorv(s, fmt, ap);
 	va_end(ap);
 }
+
 void diag_warning(struct source_span s, const char *fmt, ...) {
 	va_list ap;
 	va_start(ap, fmt);
-	diag_vreport(DIAG_LEVEL_WARNING, s, fmt, ap);
+	diag_warningv(s, fmt, ap);
 	va_end(ap);
 }
+
 void diag_note(struct source_span s, const char *fmt, ...) {
 	va_list ap;
 	va_start(ap, fmt);
-	diag_vreport(DIAG_LEVEL_NOTE, s, fmt, ap);
+	diag_notev(s, fmt, ap);
 	va_end(ap);
 }
+
 void diag_info(struct source_span s, const char *fmt, ...) {
 	va_list ap;
 	va_start(ap, fmt);
-	diag_vreport(DIAG_LEVEL_INFO, s, fmt, ap);
+	diag_infov(s, fmt, ap);
 	va_end(ap);
 }
 
 void diag_context(diag_level lvl, struct source_span s, const char *fmt, ...) {
-	if (!diag_inited)
-		diag_init();
-
-	char labelbuf[64];
-	const char *col = diag_use_color ? lvl_color(lvl) : "";
-	const char *rcol = diag_use_color ? ANSI_RESET : "";
-	snprintf(labelbuf, sizeof(labelbuf), "%s%s:%s", col, lvl_str(lvl), rcol);
-
-	char msgbuf[1024];
 	va_list ap;
 	va_start(ap, fmt);
-	vsnprintf(msgbuf, sizeof(msgbuf), fmt, ap);
+	diag_contextv(lvl, s, fmt, ap);
 	va_end(ap);
-
-	print_context_msg(s, labelbuf, msgbuf);
 }

@@ -34,4 +34,10 @@ void diag_info(struct source_span span, const char *fmt, ...);
 
 void diag_context(diag_level level, struct source_span span, const char *fmt, ...);
 
+void diag_errorv(struct source_span span, const char *fmt, va_list ap);
+void diag_warningv(struct source_span span, const char *fmt, va_list ap);
+void diag_notev(struct source_span span, const char *fmt, va_list ap);
+void diag_infov(struct source_span span, const char *fmt, va_list ap);
+void diag_contextv(diag_level level, struct source_span span, const char *fmt, va_list ap);
+
 #endif /* DIAG_H */
