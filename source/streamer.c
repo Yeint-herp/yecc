@@ -4,19 +4,23 @@
 static bool refill_buffer(struct streamer *s) {
 	if (!s->handle)
 		return false;
+
 	if (fseek(s->handle, (long)s->buffer_start, SEEK_SET) != 0)
 		return false;
 
 	s->buffer_len = fread(s->buffer, 1, STREAMER_BUFFER_SIZE, s->handle);
 	s->buffer_pos = s->pos - s->buffer_start;
+
 	if (s->buffer_pos > s->buffer_len)
 		s->buffer_pos = s->buffer_len;
+
 	return true;
 }
 
 bool streamer_open(struct streamer *s, const char *filename) {
 	if (!s)
 		return false;
+
 	memset(s, 0, sizeof *s);
 
 	s->filename = filename;
@@ -28,13 +32,15 @@ bool streamer_open(struct streamer *s, const char *filename) {
 
 	if (fseek(s->handle, 0, SEEK_END) != 0)
 		goto fail;
-	long fsz = ftell(s->handle);
-	if (fsz < 0)
-		goto fail;
-	s->len = (size_t)fsz;
 
+	long file_size = ftell(s->handle);
+	if (file_size < 0)
+		goto fail;
+
+	s->len = (size_t)file_size;
 	if (fseek(s->handle, 0, SEEK_SET) != 0)
 		goto fail;
+
 	s->buffer_start = 0;
 	if (!refill_buffer(s))
 		goto fail;
@@ -50,8 +56,10 @@ fail:
 void streamer_close(struct streamer *s) {
 	if (!s)
 		return;
+
 	if (s->handle)
 		fclose(s->handle);
+
 	memset(s, 0, sizeof *s);
 }
 
@@ -72,14 +80,17 @@ bool streamer_seek(struct streamer *s, size_t offset) {
 	if (!refill_buffer(s))
 		return false;
 
+	// walk with streamer_next to update line/columns
 	while (s->pos < offset) {
 		if (streamer_next(s) < 0)
 			return false;
 	}
+
 	return true;
 }
 
 int streamer_peek(struct streamer *s) {
+	// check pushback cache
 	if (s->pushback_len > 0)
 		return s->pushback_buf[s->pushback_len - 1];
 
@@ -96,6 +107,7 @@ int streamer_peek(struct streamer *s) {
 }
 
 int streamer_next(struct streamer *s) {
+	// first consume characters in the pushback buffer
 	if (s->pushback_len > 0) {
 		uint8_t c = s->pushback_buf[--s->pushback_len];
 		s->line = s->pushback_line[s->pushback_len];
@@ -112,6 +124,7 @@ int streamer_next(struct streamer *s) {
 		return -1;
 	uint8_t c = (uint8_t)ci;
 
+	// save previous information for diagnostics
 	s->prev_line = s->line;
 	s->prev_column = s->column;
 
@@ -119,6 +132,7 @@ int streamer_next(struct streamer *s) {
 	s->buffer_pos++;
 	s->last_char = c;
 
+	// update line/column
 	if (c == '\n') {
 		s->line++;
 		s->column = 1;
@@ -162,20 +176,41 @@ struct source_position streamer_position(const struct streamer *s) {
 
 struct streamer_blob streamer_get_blob(struct streamer *s) {
 	struct streamer_blob b = {{0}};
-	long start = (long)s->pos - 2;
-	if (start < 0)
-		start = 0;
 
-	if ((size_t)start >= s->buffer_start && (size_t)(start + 5) <= s->buffer_start + s->buffer_len) {
-		size_t off = (size_t)(start - s->buffer_start);
-		memcpy(b.cache, &s->buffer[off], 5);
+	// current byte should be index 2
+	long start = (long)s->pos - 2;
+	size_t left_pad = 0;
+
+	if (start < 0) {
+		// starts before BOF
+		left_pad = (size_t)(-start);
+		if (left_pad > 5)
+			left_pad = 5;
+		start = 0;
+	}
+
+	size_t need = 5 - left_pad;
+
+	// if entire range is in buffer, read from buffer
+	if (need > 0 && (size_t)start >= s->buffer_start && (size_t)start + need <= s->buffer_start + s->buffer_len) {
+		size_t off = (size_t)start - s->buffer_start;
+		memcpy(&b.cache[left_pad], &s->buffer[off], need);
 		return b;
 	}
 
-	long cur = ftell(s->handle);
-	if (fseek(s->handle, start, SEEK_SET) == 0) {
-		fread(b.cache, 1, 5, s->handle);
+	if (need > 0 && s->handle) {
+		long cur = ftell(s->handle);
+		if (cur >= 0 && fseek(s->handle, start, SEEK_SET) == 0) {
+			size_t got = fread(&b.cache[left_pad], 1, need, s->handle);
+			(void)got;
+		}
+		// best effort restore
+		if (cur >= 0) {
+			(void)fseek(s->handle, cur, SEEK_SET);
+		}
+		return b;
 	}
-	fseek(s->handle, cur, SEEK_SET);
+
+	// range is completelty off, empty blob
 	return b;
 }

@@ -150,9 +150,9 @@ static void test_blob(void) {
 	// start of file
 	ASSERT(streamer_seek(&s, 0));
 	struct streamer_blob b2 = streamer_get_blob(&s);
-	ASSERT(b2.cache[0] == '0');
-	ASSERT(b2.cache[1] == '1');
-	ASSERT(b2.cache[2] == '2');
+	ASSERT(b2.cache[2] == '0');
+	ASSERT(b2.cache[3] == '1');
+	ASSERT(b2.cache[4] == '2');
 
 	// near end of file
 	ASSERT(streamer_seek(&s, 9));
