@@ -100,8 +100,10 @@ void yecc_context_set_warnings_as_errors(struct yecc_context *ctx, bool on) {
 		ctx->warnings_as_errors = on;
 }
 void yecc_context_set_pedantic(struct yecc_context *ctx, bool on) {
-	if (ctx)
+	if (ctx) {
 		ctx->pedantic = on;
+		yecc_warning_enable(ctx, YECC_W_PEDANTIC, true);
+	}
 }
 
 void yecc_context_set_max_errors(struct yecc_context *ctx, int n) {

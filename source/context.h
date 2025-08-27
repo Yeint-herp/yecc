@@ -145,6 +145,15 @@ struct yecc_context {
 
 static inline unsigned yecc_warning_bit(enum yecc_warning w) { return 1u << (unsigned)w; }
 static inline unsigned long long yecc_cpufeat_bit(enum yecc_cpu_feature f) { return 1ull << (unsigned)f; }
+static inline bool yecc_std_at_least(struct yecc_context *ctx, enum yecc_lang_standard need) {
+	return (int)ctx->lang_std >= (int)need;
+}
+static inline bool yecc_context_warning_enabled(const struct yecc_context *ctx, enum yecc_warning wid) {
+	return (ctx->warning_enabled_mask & yecc_warning_bit(wid)) != 0u;
+}
+static inline bool yecc_context_warning_as_error(const struct yecc_context *ctx, enum yecc_warning wid) {
+	return (ctx->warning_error_mask & yecc_warning_bit(wid)) != 0u;
+}
 
 _Static_assert(YECC_W_COUNT <= 32, "warning mask is 32-bit; increase type size");
 
