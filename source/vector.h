@@ -115,6 +115,11 @@
 		(v)->size--;                                                                                                   \
 	} while (0)
 
+/* iterates over all elements in vector v. */
+#define vector_foreach(v, var)                                                                                         \
+	for (size_t __i = 0; __i < (v)->size; ++__i)                                                                       \
+		for (typeof((v)->data) var = &(v)->data[__i]; var; var = nullptr)
+
 #define vector_move(dest, src)                                                                                         \
 	do {                                                                                                               \
 		free((dest)->data);                                                                                            \
