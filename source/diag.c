@@ -1,3 +1,4 @@
+#include <context.h>
 #include <diag.h>
 #include <stdarg.h>
 #include <stdio.h>
@@ -12,8 +13,9 @@
 #define ANSI_GREEN "\x1b[32m"
 #define ANSI_RESET "\x1b[0m"
 
-static bool diag_inited = false;
 static bool diag_use_color = false;
+static int diag_hard_error_count = 0;
+static struct yecc_context *diag_ctx;
 
 static const char *lvl_str(diag_level l) {
 	switch (l) {
@@ -68,6 +70,12 @@ static char *read_line(const char *fn, size_t want) {
 static void print_context_vmsg(struct source_span sp, diag_level lvl, const char *fmt, va_list ap_in) {
 	size_t start = sp.start.line;
 	size_t end = sp.end.line < start ? start : sp.end.line;
+
+	if (lvl == DIAG_LEVEL_ERROR) {
+		diag_hard_error_count++;
+		if (diag_ctx && diag_hard_error_count > diag_ctx->max_errors)
+			exit(1);
+	}
 
 	size_t width = 0;
 	for (size_t n = start; n <= end; n++) {
@@ -125,19 +133,14 @@ static void print_context_vmsg(struct source_span sp, diag_level lvl, const char
 	}
 }
 
-void diag_init(void) {
-	if (diag_inited)
-		return;
-	diag_inited = true;
+void diag_init(struct yecc_context *context) {
+	diag_ctx = context;
 	diag_use_color = isatty(fileno(stderr)) && !getenv("NO_COLOR");
 	if (getenv("CLICOLOR_FORCE"))
 		diag_use_color = true;
 }
 
 static void diag_reportv(diag_level lvl, struct source_span sp, const char *fmt, va_list ap) {
-	if (!diag_inited)
-		diag_init();
-
 	if (diag_use_color) {
 		fputs(ANSI_BOLD "yecc:" ANSI_RESET " ", stderr);
 	} else {
@@ -154,9 +157,6 @@ void diag_notev(struct source_span s, const char *fmt, va_list ap) { diag_report
 void diag_infov(struct source_span s, const char *fmt, va_list ap) { diag_reportv(DIAG_LEVEL_INFO, s, fmt, ap); }
 
 void diag_contextv(diag_level lvl, struct source_span s, const char *fmt, va_list ap) {
-	if (!diag_inited)
-		diag_init();
-
 	print_context_vmsg(s, lvl, fmt, ap);
 }
 

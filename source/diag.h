@@ -1,6 +1,7 @@
 #ifndef DIAG_H
 #define DIAG_H
 
+#include <context.h>
 #include <stdarg.h>
 #include <stdbool.h>
 #include <stddef.h>
@@ -21,9 +22,9 @@ typedef enum { DIAG_LEVEL_ERROR, DIAG_LEVEL_WARNING, DIAG_LEVEL_NOTE, DIAG_LEVEL
  *
  * Detects whether stderr is connected to a terminal and reads NO_COLOR /
  * CLICOLOR_FORCE environment variables to decide whether to emit ANSI colors.
- * Must be called before any diagnostics are emitted; it's idempotent.
+ * Must be called before any diagnostics are emitted.
  */
-void diag_init(void);
+void diag_init(struct yecc_context *context);
 
 /* report an error (non‐fatal) */
 void diag_error(struct source_span span, const char *fmt, ...);

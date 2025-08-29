@@ -190,7 +190,7 @@ static void test_long_message(void) {
 }
 
 int main(void) {
-	diag_init();
+	diag_init(nullptr);
 
 	test_dir = mkdtemp(tmpdir_template);
 	assert(test_dir && "mkdtemp failed");
