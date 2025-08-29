@@ -3,10 +3,9 @@
 
 #include <stdbool.h>
 #include <stddef.h>
-#include <string_intern.h>
 #include <vector.h>
 
-/* Language standard the front-end should adhere to. */
+/* language standard the front-end should adhere to. */
 enum yecc_lang_standard {
 	YECC_LANG_C89,
 	YECC_LANG_C99,
@@ -15,7 +14,7 @@ enum yecc_lang_standard {
 	YECC_LANG_C23,
 };
 
-/* Backend optimization preference. */
+/* backend optimization preference. */
 /* FIXME: only O0 and O2 are in effect, others round up/down to O2 */
 enum yecc_opt_level {
 	YECC_O0 = 0, /* no optimizations */
@@ -24,7 +23,7 @@ enum yecc_opt_level {
 	YECC_O3 = 3,
 };
 
-/* Diagnostics / warnings enum */
+/* diagnostics / warnings enum */
 enum yecc_warning {
 	YECC_W_UNUSED = 0,
 	YECC_W_UNUSED_PARAMETER,
@@ -46,7 +45,7 @@ enum yecc_warning {
 	YECC_W_COUNT
 };
 
-/* Stage at which the compilation finishe and output is presented to the user. */
+/* stage at which the compilation finishe and output is presented to the user. */
 enum yecc_target_stage {
 	YECC_TARGET_STAGE_I,   /* preprocessed raw source */
 	YECC_TARGET_STAGE_AST, /* ast text representation */
@@ -58,17 +57,17 @@ enum yecc_target_stage {
 
 enum yecc_color_mode { YECC_COLOR_AUTO, YECC_COLOR_ALWAYS, YECC_COLOR_NEVER };
 
-/* How to respond to unkown Pragmas. */
+/* how to respond to unkown Pragmas. */
 enum yecc_pragma_policy { YECC_PRAGMA_IGNORE, YECC_PRAGMA_WARN, YECC_PRAGMA_ERROR };
 
-/* Float mode: full HW fp, soft-float codegen intent, or disabled (reject float types). */
-/* This does not affect the usage of SIMD in optimizations! */
+/* float mode: full HW fp, soft-float codegen intent, or disabled (reject float types). */
+/* this does not affect the usage of SIMD in optimizations! */
 enum yecc_float_mode { YECC_FLOAT_FULL, YECC_FLOAT_SOFT, YECC_FLOAT_DISABLED };
 
 enum yecc_reloc_model { YECC_RELOC_STATIC, YECC_RELOC_PIC, YECC_RELOC_PIE };
 enum yecc_code_model { YECC_CODE_SMALL, YECC_CODE_MEDIUM, YECC_CODE_LARGE };
 
-/* A tiny, portable CPU feature mask, most are going to be unneeded for a long time. */
+/* a tiny, portable CPU feature mask, most are going to be unneeded for a long time. */
 enum yecc_cpu_feature {
 	YECC_CPUFEAT_SSE2 = 0,
 	YECC_CPUFEAT_SSE3 = 1,
@@ -86,34 +85,35 @@ enum yecc_cpu_feature {
 	YECC_CPUFEAT_COUNT
 };
 
-/* Top-level compiler context */
+/* top-level compiler context */
 struct yecc_context {
 	enum yecc_lang_standard lang_std;
 	enum yecc_opt_level opt_level;
 	enum yecc_target_stage target_stage;
 
-	/* Target and environment */
+	/* target and environment */
 	const char *target_triple;
-	const char *sysroot; /* path or NULL */
+	const char *sysroot; /* path or nullptr */
 
-	/* Search paths */
+	/* search paths */
 	vector_of(const char *) include_paths;		  /* -I user paths */
 	vector_of(const char *) system_include_paths; /* -isystem paths */
 
-	/* Command line defined macros */
+	/* command line defined macros */
 	vector_of(const char *) predefined_macros;
 
-	/* Custom warnings */
+	/* custom warnings */
 	unsigned warning_enabled_mask;
 	unsigned warning_error_mask;
 
 	enum yecc_color_mode color_mode;
 	enum yecc_pragma_policy unknown_pragma_policy;
 	bool warnings_as_errors;
-	bool pedantic;		 /* treat non-conforming constructs as diagnostics */
-	int max_errors;		 /* cap hard errors, default 20 */
-	bool gnu_extensions; /* std=gnuXX vs std=cXX */
-	bool no_short_enums; /* force enums to int size */
+	bool pedantic;		  /* treat non-conforming constructs as diagnostics */
+	int max_errors;		  /* cap hard errors, default 20 */
+	bool gnu_extensions;  /* std=gnuXX vs std=cXX */
+	bool yecc_extensions; /* disabed by -pedantic and -no-yecc */
+	bool no_short_enums;  /* force enums to int size */
 
 	bool enable_trigraphs; /* map ??x to punctuators */
 
@@ -129,7 +129,7 @@ struct yecc_context {
 	unsigned long long cpu_features_enable_mask;  /* feature allow-list */
 	unsigned long long cpu_features_disable_mask; /* explicit disable overrides */
 
-	/* Standard libraries and link policy */
+	/* standard libraries and link policy */
 	bool use_standard_includes; /* inject default system include set */
 	bool nostdlib;				/* do not link startup files or stdlibs */
 	bool nodefaultlibs;			/* clear default libs, only explicit -l */
@@ -174,6 +174,7 @@ void yecc_context_set_max_errors(struct yecc_context *ctx, int n);
 void yecc_context_set_unknown_pragma_policy(struct yecc_context *ctx, enum yecc_pragma_policy pol);
 
 void yecc_context_set_gnu_extensions(struct yecc_context *ctx, bool on);
+void yecc_context_set_yecc_extensions(struct yecc_context *ctx, bool on);
 void yecc_context_set_no_short_enums(struct yecc_context *ctx, bool on);
 
 void yecc_context_set_enable_trigraphs(struct yecc_context *ctx, bool on);

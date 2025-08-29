@@ -24,7 +24,8 @@ void yecc_context_init(struct yecc_context *ctx) {
 	ctx->warnings_as_errors = false;
 	ctx->pedantic = false;
 	ctx->max_errors = 20;
-	ctx->gnu_extensions = false;
+	ctx->gnu_extensions = true;
+	ctx->yecc_extensions = true;
 	ctx->no_short_enums = false;
 
 	ctx->enable_trigraphs = false;
@@ -118,6 +119,13 @@ void yecc_context_set_unknown_pragma_policy(struct yecc_context *ctx, enum yecc_
 void yecc_context_set_gnu_extensions(struct yecc_context *ctx, bool on) {
 	if (ctx)
 		ctx->gnu_extensions = on;
+}
+void yecc_context_set_yecc_extensions(struct yecc_context *ctx, bool on) {
+	if (ctx) {
+		ctx->yecc_extensions = on;
+		if (on)
+			ctx->gnu_extensions = on;
+	}
 }
 void yecc_context_set_no_short_enums(struct yecc_context *ctx, bool on) {
 	if (ctx)
