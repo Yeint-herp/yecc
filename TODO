@@ -1,3 +1,14 @@
+- [ ] Rewrite compiler module design into a amodular multi-executable compiler.
+- [ ] Rewrite compiler context module.
 - [ ] Document arena.c
 - [ ] Document diag.c
 - [ ] Document string_intern.c
+- [ ] Document lexer.c
+- [ ] Modularize the lexer, create a separate unicode module.
+
+- [ ] Improve diagnostics to highlight erroneous text in color.
+- [ ] Add trace support for lexer.
+- [ ] When encountering non ASCII bytes in plain character literals/strings, attempt to parse it anyway and emit one diagnostic instead of one for each byte.
+- [ ] Parse unicode character width to fix diagnostic arrows.
+
+- [ ] Multibyte diagnostics

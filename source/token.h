@@ -94,12 +94,15 @@ enum token_kind {
 	TOKEN_PP_WARNING,
 	TOKEN_PP___HAS_INCLUDE,
 	TOKEN_PP___HAS_C_ATTRIBUTE,
+	TOKEN_PP__ASSERT,
+	TOKEN_PP__ASSERT_ANY,
 	TOKEN_PP___VA_OPT__,
 
 	TOKEN_PP_INCLUDE_NEXT,
 	TOKEN_PP_IDENT,
 	TOKEN_PP_SCCS,
 	TOKEN_PP_ASSERT,
+	TOKEN_PP_UNASSERT,
 
 	TOKEN_KW_TYPEOF,
 	TOKEN_KW_ASM,
@@ -114,6 +117,7 @@ enum token_kind {
 	TOKEN_KW___THREAD,
 	TOKEN_KW___FUNCTION__,
 
+	TOKEN_KW_TYPEDEF,
 	TOKEN_KW_ALIGNAS,
 	TOKEN_KW_ALIGNOF,
 	TOKEN_KW_ATOMIC,
@@ -131,6 +135,7 @@ enum token_kind {
 	TOKEN_KW_ENUM,
 	TOKEN_KW_EXTERN,
 	TOKEN_KW_FALSE,
+	TOKEN_KW_TRUE,
 	TOKEN_KW_FLOAT,
 	TOKEN_KW_FOR,
 	TOKEN_KW_GENERIC,
@@ -160,6 +165,7 @@ enum token_kind {
 	TOKEN_KW__COMPLEX,
 	TOKEN_KW__STATIC_ASSERT,
 	TOKEN_KW__BITINT,
+	TOKEN_KW__PRAGMA,
 
 	TOKEN_KW___INT128,
 
@@ -180,7 +186,7 @@ enum token_kind {
 };
 
 /* flags on numeric/string tokens (suffixes, wide/text markers) */
-enum token_flags {
+enum token_flags : uint8_t {
 	TOKEN_FLAG_NONE = 0,
 
 	TOKEN_FLAG_UNSIGNED = 1u << 0,		 // integer: ‘u’ or ‘U’
@@ -197,25 +203,68 @@ enum token_flags {
 /* the payload carried by a token */
 union token_value {
 	int64_t i;			 // integer literal
+	uint64_t u;			 // unsigned integer literal
 	double f;			 // floating-point literal
 	const char *str;	 // identifier/keyword (interned)
 	char *str_lit;		 // plain or u8 string literal
 	wchar_t *wstr_lit;	 // L"" wide string literal
+	char8_t *str8_lit;	 // u8"" UTF-8 string literal
 	char16_t *str16_lit; // u"" UTF-16 string literal
 	char32_t *str32_lit; // U"" UTF-32 string literal
 	const char *err;	 // error message
 	char c;				 // char literal
 	wchar_t wc;			 // wide char literal
+	char8_t c8;			 // UTF-8 char literal
 	char16_t c16;		 // UTF-16 char literal
 	char32_t c32;		 // UTF-32 char literal
 };
 
-/* The fundamental token structure. */
+enum token_int_base : uint8_t {
+	TOKEN_INT_BASE_NONE = 0, /* not an int literal */
+	TOKEN_INT_BASE_10 = 10,
+	TOKEN_INT_BASE_16 = 16,
+	TOKEN_INT_BASE_8 = 8,
+	TOKEN_INT_BASE_2 = 2,
+};
+
+enum token_float_style : uint8_t {
+	TOKEN_FLOAT_DEC = 0,
+	TOKEN_FLOAT_HEX = 1,
+};
+
+enum token_float_suffix : uint8_t {
+	TOKEN_FSUF_NONE = 0,
+	TOKEN_FSUF_f, /* f */
+	TOKEN_FSUF_l, /* l */
+	TOKEN_FSUF_f16,
+	TOKEN_FSUF_f32,
+	TOKEN_FSUF_f64,
+	TOKEN_FSUF_f128,
+	TOKEN_FSUF_f32x,
+	TOKEN_FSUF_f64x,
+	TOKEN_FSUF_f128x,
+	TOKEN_FSUF_df,
+	TOKEN_FSUF_dd,
+	TOKEN_FSUF_dl,
+};
+
+/* fundamental token structure. */
 struct token {
 	enum token_kind kind;
 	struct source_span loc;
 	enum token_flags flags;
 	union token_value val;
+
+	union {
+		struct {
+			enum token_int_base base;
+		} i;
+
+		struct {
+			enum token_float_style style;
+			enum token_float_suffix suffix;
+		} f;
+	} num_extra;
 };
 
 #endif /* TOKEN_H */

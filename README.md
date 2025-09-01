@@ -43,8 +43,12 @@ Chronological and logical order of modules of the compiler:
 - Hashmap module: `map.h`
 - Vector (dynamic array) module: `vector.h`
 - Deque module: `deque.h`
+- Compiler global state context module `context.h` `context.c`
 - String interner module: `string_intern.h` `string_intern.c`
 - File streamer module: `streamer.c` `streamer.h`
 - Error diagnostics module: `diag.h` `diag.c`
 - Token module: `token.h`
-- Compiler global state context module `context.h` `context.c`
+- Lexer module `lexer.h` `lexer.c`
+- Debug printing module `print.h` `print.c`
+
+The formatting module `print.h` is special as it provides formatting functionality for all other modules and can be called into by any when human readable serialization is needed.
