@@ -645,8 +645,21 @@ struct kw_entry {
 
 static const struct kw_entry KW_TABLE[] = {KW_DB(MAKE_ENTRY)};
 
-static const struct kw_entry *kw_lookup(const char *s) {
+static const struct kw_entry *kw_lookup_first(const char *s) {
 	for (size_t i = 0; i < sizeof(KW_TABLE) / sizeof(KW_TABLE[0]); ++i)
+		if (strcmp(s, KW_TABLE[i].name) == 0)
+			return &KW_TABLE[i];
+	return nullptr;
+}
+
+static const struct kw_entry *kw_lookup_next(const char *s, const struct kw_entry *prev) {
+	size_t start = 0;
+	if (prev) {
+		if (prev < &KW_TABLE[0] || prev >= &KW_TABLE[0] + (sizeof(KW_TABLE) / sizeof(KW_TABLE[0])))
+			return nullptr;
+		start = (size_t)((prev - &KW_TABLE[0]) + 1);
+	}
+	for (size_t i = start; i < sizeof(KW_TABLE) / sizeof(KW_TABLE[0]); ++i)
 		if (strcmp(s, KW_TABLE[i].name) == 0)
 			return &KW_TABLE[i];
 	return nullptr;
@@ -718,20 +731,43 @@ static inline void pp_note_after_keyword(struct lexer *lx, enum token_kind k) {
 	}
 }
 
+static inline const struct kw_entry *kw_lookup_ctx(const char *s, bool in_directive) {
+	const struct kw_entry *first = kw_lookup_first(s);
+	if (!first)
+		return nullptr;
+
+	const struct kw_entry *best = nullptr;
+	for (const struct kw_entry *E = first; E; E = kw_lookup_next(s, E)) {
+		if (!best)
+			best = E;
+		if (in_directive) {
+			if (E->is_pp)
+				return E;
+		} else {
+			if (!E->is_pp)
+				return E;
+		}
+	}
+	return best;
+}
+
 enum token_kind classify_ident(const char *s, bool in_directive) {
-	const struct kw_entry *E = kw_lookup(s);
+	const struct kw_entry *E = kw_lookup_ctx(s, in_directive);
 	if (!E)
 		return TOKEN_IDENTIFIER;
+
 	if (E->is_pp && !in_directive)
 		return TOKEN_IDENTIFIER;
+
 	return E->kind;
 }
 
 void maybe_warn_ident_use(struct lexer *lx, const char *lexeme, enum token_kind k, struct source_span sp) {
 	(void)k;
-	const struct kw_entry *E = kw_lookup(lexeme);
+	const struct kw_entry *E = kw_lookup_ctx(lexeme, lx->in_directive);
 	if (!E)
 		return;
+
 	maybe_warn_from_entry(lx, lexeme, E, sp);
 	if (E->is_pp)
 		pp_note_after_keyword(lx, E->kind);
@@ -1525,7 +1561,7 @@ static struct token read_string_literal(struct lexer *lx) {
 		} else if (blob.cache[2] == 'L' && blob.cache[3] == '"') {
 			prefix = LIT_WIDE;
 			NEXT(lx);
-		} else if ((blob.cache[2] == 'u' || blob.cache[2] == 'U' || blob.cache[2] == 'L') && blob.cache[1] != '"' &&
+		} else if ((blob.cache[2] == 'u' || blob.cache[2] == 'U' || blob.cache[2] == 'L') && blob.cache[3] != '"' &&
 				   !(blob.cache[2] == 'u' && blob.cache[3] == '8')) {
 			struct source_position p = streamer_position(&lx->s);
 			diag_error((struct source_span){p, p}, "invalid string literal prefix");
@@ -1598,7 +1634,7 @@ static struct token read_string_literal(struct lexer *lx) {
 			break;
 
 		enum lit_kind next_kind = np ? LIT_PLAIN : n8 ? LIT_UTF8 : n16 ? LIT_UTF16 : n32 ? LIT_UTF32 : LIT_WIDE;
-		enum lit_kind promoted = lit_promote(prefix, next_kind, lx->ctx, NULL);
+		enum lit_kind promoted = lit_promote(prefix, next_kind, lx->ctx, nullptr);
 		if (promoted != prefix) {
 			diag_promotion(lx, (struct source_span){start, streamer_position(&lx->s)}, prefix, promoted);
 			prefix = promoted;
@@ -1667,7 +1703,7 @@ static struct token read_string_literal(struct lexer *lx) {
 
 	switch (prefix) {
 	case LIT_WIDE: {
-		size_t n = cps.size;
+		size_t n = vector_size(&cps);
 		wchar_t *wbuf = malloc((n + 1) * sizeof(wchar_t));
 		for (size_t i = 0; i < n; i++) {
 			uint32_t cp = cps.data[i];
@@ -1691,22 +1727,21 @@ static struct token read_string_literal(struct lexer *lx) {
 	} break;
 
 	case LIT_UTF16: {
-		size_t max_units = cps.size * 2 + 1;
+		size_t max_units = vector_size(&cps) * 2 + 1;
 		char16_t *u16 = malloc(max_units * sizeof(char16_t));
 		size_t j = 0;
-		for (size_t i = 0; i < cps.size; i++) {
-			uint32_t cp = cps.data[i];
-			if (cp > 0x10FFFF || (cp >= 0xD800 && cp <= 0xDFFF)) {
+		vector_foreach(&cps, cp) {
+			if (*cp > 0x10FFFF || (*cp >= 0xD800 && *cp <= 0xDFFF)) {
 				diag_warning((struct source_span){start, streamer_position(&lx->s)},
-							 "invalid Unicode scalar U+%04X in u\"\"; using U+FFFD", (unsigned)cp);
-				cp = 0xFFFD;
+							 "invalid Unicode scalar U+%04X in u\"\"; using U+FFFD", (unsigned)*cp);
+				*cp = 0xFFFD;
 			}
-			if (cp <= 0xFFFF) {
-				u16[j++] = (char16_t)cp;
+			if (*cp <= 0xFFFF) {
+				u16[j++] = (char16_t)*cp;
 			} else {
-				cp -= 0x10000;
-				u16[j++] = (char16_t)(0xD800 + (cp >> 10));
-				u16[j++] = (char16_t)(0xDC00 + (cp & 0x3FF));
+				*cp -= 0x10000;
+				u16[j++] = (char16_t)(0xD800 + (*cp >> 10));
+				u16[j++] = (char16_t)(0xDC00 + (*cp & 0x3FF));
 			}
 		}
 		u16[j] = 0;
@@ -1715,7 +1750,7 @@ static struct token read_string_literal(struct lexer *lx) {
 	} break;
 
 	case LIT_UTF32: {
-		size_t n = cps.size;
+		size_t n = vector_size(&cps);
 		char32_t *u32 = malloc((n + 1) * sizeof(char32_t));
 		for (size_t i = 0; i < n; i++) {
 			uint32_t cp = cps.data[i];
@@ -1735,47 +1770,45 @@ static struct token read_string_literal(struct lexer *lx) {
 	case LIT_PLAIN: {
 		if (prefix == LIT_UTF8) {
 			size_t total = 0;
-			for (size_t i = 0; i < cps.size; i++) {
-				uint32_t cp = cps.data[i];
-				if (cp <= 0x7F)
+			vector_foreach(&cps, cp) {
+				if (*cp <= 0x7F)
 					total += 1;
-				else if (cp <= 0x7FF)
+				else if (*cp <= 0x7FF)
 					total += 2;
-				else if (cp <= 0xFFFF)
+				else if (*cp <= 0xFFFF)
 					total += 3;
 				else
 					total += 4;
 			}
 			char8_t *buf = malloc(total + 1);
 			size_t pos = 0;
-			for (size_t i = 0; i < cps.size; i++) {
-				uint32_t cp = cps.data[i];
-				if (cp > 0x10FFFF || (cp >= 0xD800 && cp <= 0xDFFF)) {
+			vector_foreach(&cps, cp) {
+				if (*cp > 0x10FFFF || (*cp >= 0xD800 && *cp <= 0xDFFF)) {
 					diag_warning((struct source_span){start, streamer_position(&lx->s)},
-								 "invalid Unicode scalar U+%04X in u8\"\"; using U+FFFD", (unsigned)cp);
-					cp = 0xFFFD;
+								 "invalid Unicode scalar U+%04X in u8\"\"; using U+FFFD", (unsigned)*cp);
+					*cp = 0xFFFD;
 				}
-				if (cp <= 0x7F) {
-					buf[pos++] = (char)cp;
-				} else if (cp <= 0x7FF) {
-					buf[pos++] = (char)(0xC0 | (cp >> 6));
-					buf[pos++] = (char)(0x80 | (cp & 0x3F));
-				} else if (cp <= 0xFFFF) {
-					buf[pos++] = (char)(0xE0 | (cp >> 12));
-					buf[pos++] = (char)(0x80 | ((cp >> 6) & 0x3F));
-					buf[pos++] = (char)(0x80 | (cp & 0x3F));
+				if (*cp <= 0x7F) {
+					buf[pos++] = (char)*cp;
+				} else if (*cp <= 0x7FF) {
+					buf[pos++] = (char)(0xC0 | (*cp >> 6));
+					buf[pos++] = (char)(0x80 | (*cp & 0x3F));
+				} else if (*cp <= 0xFFFF) {
+					buf[pos++] = (char)(0xE0 | (*cp >> 12));
+					buf[pos++] = (char)(0x80 | ((*cp >> 6) & 0x3F));
+					buf[pos++] = (char)(0x80 | (*cp & 0x3F));
 				} else {
-					buf[pos++] = (char)(0xF0 | (cp >> 18));
-					buf[pos++] = (char)(0x80 | ((cp >> 12) & 0x3F));
-					buf[pos++] = (char)(0x80 | ((cp >> 6) & 0x3F));
-					buf[pos++] = (char)(0x80 | (cp & 0x3F));
+					buf[pos++] = (char)(0xF0 | (*cp >> 18));
+					buf[pos++] = (char)(0x80 | ((*cp >> 12) & 0x3F));
+					buf[pos++] = (char)(0x80 | ((*cp >> 6) & 0x3F));
+					buf[pos++] = (char)(0x80 | (*cp & 0x3F));
 				}
 			}
 			buf[pos] = '\0';
 			tok.val.str8_lit = buf;
 			tok.flags = TOKEN_FLAG_STR_UTF8;
 		} else {
-			size_t n = cps.size;
+			size_t n = vector_size(&cps);
 			char *buf = malloc(n + 1);
 			for (size_t i = 0; i < n; i++)
 				buf[i] = (char)(cps.data[i] & 0xFF);
@@ -1912,14 +1945,14 @@ unterminated_character:
 			.kind = TOKEN_ERROR, .loc = {start, p}, .val.err = intern("unterminated character literal")};
 	}
 
-	if (chars.size == 0) {
+	if (vector_size(&chars) == 0) {
 		struct source_position p = streamer_position(&lx->s);
 		diag_error((struct source_span){start, p}, "empty character literal");
 		vector_destroy(&chars);
 		return (struct token){.kind = TOKEN_ERROR, .loc = {start, p}, .val.err = intern("empty character literal")};
 	}
 
-	if (chars.size > 1) {
+	if (vector_size(&chars) > 1) {
 		if (yecc_context_warning_enabled(lx->ctx, YECC_W_MULTICHAR_CHAR)) {
 			if (lx->ctx->warnings_as_errors && yecc_context_warning_as_error(lx->ctx, YECC_W_MULTICHAR_CHAR))
 				diag_error((struct source_span){start, streamer_position(&lx->s)}, "multi-character character literal");
@@ -1928,8 +1961,7 @@ unterminated_character:
 							 "multi-character character literal");
 		}
 		uint32_t v = 0;
-		for (size_t i = 0; i < chars.size; i++)
-			v = (v << 8) | (chars.data[i] & 0xFF);
+		vector_foreach(&chars, chr) { v = (v << 8) | (*chr & 0xFF); }
 		vector_clear(&chars);
 		vector_push(&chars, v);
 	}
@@ -2068,7 +2100,7 @@ bool lexer_init(struct lexer *lx, const char *filename, struct yecc_context *ctx
 		streamer_next(&lx->s);
 		streamer_next(&lx->s);
 		streamer_next(&lx->s);
-		lx->s.column -= 3;
+		lx->s.column = 0;
 	}
 	lx->at_line_start = true;
 	lx->in_directive = false;

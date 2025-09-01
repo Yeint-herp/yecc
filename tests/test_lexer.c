@@ -1398,6 +1398,385 @@ static void test_peek_preproc_long_lookahead_boundaries(void) {
 	yecc_context_destroy(&ctx);
 }
 
+static void test_small_complete_program(void) {
+	write_file_str("prog.c", "int main(void){ "
+							 "int x = 1 + 2; "
+							 "if (x > 0) return x; else return 0; "
+							 "}\n");
+
+	struct yecc_context ctx;
+	init_ctx(&ctx, YECC_LANG_C23, false, false, false);
+
+	struct lexer lx;
+	char *p = make_path("prog.c");
+	ASSERT(lexer_init(&lx, p, &ctx));
+
+	expect_keyword(&lx, TOKEN_KW_INT, "int");
+	expect_ident(&lx, "main");
+	expect_kind(&lx, TOKEN_LPAREN);
+	expect_keyword(&lx, TOKEN_KW_VOID, "void");
+	expect_kind(&lx, TOKEN_RPAREN);
+	expect_kind(&lx, TOKEN_LBRACE);
+
+	expect_keyword(&lx, TOKEN_KW_INT, "int");
+	expect_ident(&lx, "x");
+	expect_kind(&lx, TOKEN_ASSIGN);
+	expect_int_s(&lx, 1, TOKEN_INT_BASE_10);
+	expect_kind(&lx, TOKEN_PLUS);
+	expect_int_s(&lx, 2, TOKEN_INT_BASE_10);
+	expect_kind(&lx, TOKEN_SEMICOLON);
+
+	expect_keyword(&lx, TOKEN_KW_IF, "if");
+	expect_kind(&lx, TOKEN_LPAREN);
+	expect_ident(&lx, "x");
+	expect_kind(&lx, TOKEN_GT);
+	expect_int_s(&lx, 0, TOKEN_INT_BASE_10);
+	expect_kind(&lx, TOKEN_RPAREN);
+	expect_keyword(&lx, TOKEN_KW_RETURN, "return");
+	expect_ident(&lx, "x");
+	expect_kind(&lx, TOKEN_SEMICOLON);
+
+	expect_keyword(&lx, TOKEN_KW_ELSE, "else");
+	expect_keyword(&lx, TOKEN_KW_RETURN, "return");
+	expect_int_s(&lx, 0, TOKEN_INT_BASE_10);
+	expect_kind(&lx, TOKEN_SEMICOLON);
+
+	expect_kind(&lx, TOKEN_RBRACE);
+	expect_kind(&lx, TOKEN_EOF);
+
+	lexer_destroy(&lx);
+	free(p);
+	yecc_context_destroy(&ctx);
+}
+
+static void test_large_program(void) {
+	write_file_str("large.c",
+				   "#include <stdio.h>\n"
+				   "#include \"mylib.h\"\n"
+				   "#define MAX(a,b) ((a) > (b) ? (a) : (b))\n"
+				   "#define STR(x) #x\n"
+				   "#if defined(DEBUG)\n"
+				   "#  define LOG(fmt, ...) printf(fmt, __VA_ARGS__)\n"
+				   "#else\n"
+				   "#  define LOG(fmt, ...) (void)0\n"
+				   "#endif\n"
+				   "static inline int square(int x) { return x * x; }\n"
+				   "typedef struct Point { int x; int y; } Point;\n"
+				   "enum Color { RED = 1, GREEN, BLUE };\n"
+				   "_Alignas(16) static int data[3] = { 0, 1, 2 };\n"
+				   "static const char *title = \"Hello \" \"world\";\n"
+				   "static const char8_t *u8msg = u8\"Žlutý kůň\";\n"
+				   "static const char16_t u16arr[] = u\"\\u03A9\\u03A9\";\n"
+				   "static const char32_t u32arr[] = U\"\\U0001F600\";\n"
+				   "static const wchar_t *wmsg = L\"žluťoučký kůň\";\n"
+				   "int main(void) {\n"
+				   "    int i = 0;\n"
+				   "    for (int s = 0; s < 3; ++s) { i += square(s); }\n"
+				   "    if (i > 0) { LOG(\"i=%d\\n\", i); } else { LOG(\"zero\\n\"); }\n"
+				   "    switch (i) { case 0: i = -1; break; case 1: i = +1; break; default: i = 42; break; }\n"
+				   "    return i;\n"
+				   "}\n");
+
+	struct yecc_context ctx;
+	init_ctx(&ctx, YECC_LANG_C23, true, false, true);
+
+	struct lexer lx;
+	char *p = make_path("large.c");
+	ASSERT(lexer_init(&lx, p, &ctx));
+
+	expect_kind(&lx, TOKEN_PP_HASH);
+	expect_keyword(&lx, TOKEN_PP_INCLUDE, "include");
+	expect_headername(&lx, "stdio.h");
+
+	expect_kind(&lx, TOKEN_PP_HASH);
+	expect_keyword(&lx, TOKEN_PP_INCLUDE, "include");
+	expect_headername(&lx, "mylib.h");
+
+	expect_kind(&lx, TOKEN_PP_HASH);
+	expect_keyword(&lx, TOKEN_PP_DEFINE, "define");
+	expect_ident(&lx, "MAX");
+	expect_kind(&lx, TOKEN_LPAREN);
+	expect_ident(&lx, "a");
+	expect_kind(&lx, TOKEN_COMMA);
+	expect_ident(&lx, "b");
+	{
+		int saw_body_end = 0;
+		while (!saw_body_end) {
+			struct token t = next_tok(&lx);
+			if (t.kind == TOKEN_PP_HASH) {
+				expect_keyword(&lx, TOKEN_PP_DEFINE, "define");
+				expect_ident(&lx, "STR");
+				expect_kind(&lx, TOKEN_LPAREN);
+				expect_ident(&lx, "x");
+				expect_kind(&lx, TOKEN_RPAREN);
+				expect_kind(&lx, TOKEN_PP_HASH);
+				expect_ident(&lx, "x");
+				saw_body_end = 1;
+			}
+			if (t.kind == TOKEN_EOF)
+				ASSERT(!"unexpected EOF while scanning macro area");
+		}
+	}
+
+	expect_kind(&lx, TOKEN_PP_HASH);
+	expect_keyword(&lx, TOKEN_PP_IF, "if");
+	expect_keyword(&lx, TOKEN_PP_DEFINED, "defined");
+	expect_kind(&lx, TOKEN_LPAREN);
+	expect_ident(&lx, "DEBUG");
+	expect_kind(&lx, TOKEN_RPAREN);
+
+	expect_kind(&lx, TOKEN_PP_HASH);
+	expect_keyword(&lx, TOKEN_PP_DEFINE, "define");
+	expect_ident(&lx, "LOG");
+	expect_kind(&lx, TOKEN_LPAREN);
+	expect_ident(&lx, "fmt");
+	expect_kind(&lx, TOKEN_COMMA);
+	{
+		int saw_else = 0;
+		while (!saw_else) {
+			struct token t = next_tok(&lx);
+			if (t.kind == TOKEN_PP_HASH) {
+				expect_keyword(&lx, TOKEN_PP_ELSE, "else");
+				saw_else = 1;
+				break;
+			}
+			if (t.kind == TOKEN_EOF)
+				ASSERT(!"unexpected EOF before #else");
+		}
+	}
+
+	expect_kind(&lx, TOKEN_PP_HASH);
+	expect_keyword(&lx, TOKEN_PP_DEFINE, "define");
+	expect_ident(&lx, "LOG");
+	{
+		int saw_endif = 0;
+		while (!saw_endif) {
+			struct token t = next_tok(&lx);
+			if (t.kind == TOKEN_PP_HASH) {
+				expect_keyword(&lx, TOKEN_PP_ENDIF, "endif");
+				saw_endif = 1;
+				break;
+			}
+			if (t.kind == TOKEN_EOF)
+				ASSERT(!"unexpected EOF before #endif");
+		}
+	}
+
+	expect_keyword(&lx, TOKEN_KW_STATIC, "static");
+	expect_keyword(&lx, TOKEN_KW_INLINE, "inline");
+	expect_keyword(&lx, TOKEN_KW_INT, "int");
+	expect_ident(&lx, "square");
+	expect_kind(&lx, TOKEN_LPAREN);
+	expect_keyword(&lx, TOKEN_KW_INT, "int");
+	expect_ident(&lx, "x");
+	expect_kind(&lx, TOKEN_RPAREN);
+	expect_kind(&lx, TOKEN_LBRACE);
+	expect_keyword(&lx, TOKEN_KW_RETURN, "return");
+	expect_ident(&lx, "x");
+	expect_kind(&lx, TOKEN_STAR);
+	expect_ident(&lx, "x");
+	expect_kind(&lx, TOKEN_SEMICOLON);
+	expect_kind(&lx, TOKEN_RBRACE);
+
+	expect_keyword(&lx, TOKEN_KW_TYPEDEF, "typedef");
+	expect_keyword(&lx, TOKEN_KW_STRUCT, "struct");
+	expect_ident(&lx, "Point");
+	expect_kind(&lx, TOKEN_LBRACE);
+	expect_keyword(&lx, TOKEN_KW_INT, "int");
+	expect_ident(&lx, "x");
+	expect_kind(&lx, TOKEN_SEMICOLON);
+	expect_keyword(&lx, TOKEN_KW_INT, "int");
+	expect_ident(&lx, "y");
+	expect_kind(&lx, TOKEN_SEMICOLON);
+	expect_kind(&lx, TOKEN_RBRACE);
+	expect_ident(&lx, "Point");
+	expect_kind(&lx, TOKEN_SEMICOLON);
+
+	expect_keyword(&lx, TOKEN_KW_ENUM, "enum");
+	expect_ident(&lx, "Color");
+	expect_kind(&lx, TOKEN_LBRACE);
+	expect_ident(&lx, "RED");
+	expect_kind(&lx, TOKEN_ASSIGN);
+	expect_int_s(&lx, 1, TOKEN_INT_BASE_10);
+	expect_kind(&lx, TOKEN_COMMA);
+	expect_ident(&lx, "GREEN");
+	expect_kind(&lx, TOKEN_COMMA);
+	expect_ident(&lx, "BLUE");
+	expect_kind(&lx, TOKEN_RBRACE);
+	expect_kind(&lx, TOKEN_SEMICOLON);
+
+	expect_keyword(&lx, TOKEN_KW_ALIGNAS, "_Alignas");
+	expect_kind(&lx, TOKEN_LPAREN);
+	expect_int_s(&lx, 16, TOKEN_INT_BASE_10);
+	expect_kind(&lx, TOKEN_RPAREN);
+	expect_keyword(&lx, TOKEN_KW_STATIC, "static");
+	expect_keyword(&lx, TOKEN_KW_INT, "int");
+	expect_ident(&lx, "data");
+	expect_kind(&lx, TOKEN_LBRACKET);
+	expect_int_s(&lx, 3, TOKEN_INT_BASE_10);
+	expect_kind(&lx, TOKEN_RBRACKET);
+	expect_kind(&lx, TOKEN_ASSIGN);
+	expect_kind(&lx, TOKEN_LBRACE);
+	expect_int_s(&lx, 0, TOKEN_INT_BASE_10);
+	expect_kind(&lx, TOKEN_COMMA);
+	expect_int_s(&lx, 1, TOKEN_INT_BASE_10);
+	expect_kind(&lx, TOKEN_COMMA);
+	expect_int_s(&lx, 2, TOKEN_INT_BASE_10);
+	expect_kind(&lx, TOKEN_RBRACE);
+	expect_kind(&lx, TOKEN_SEMICOLON);
+
+	expect_keyword(&lx, TOKEN_KW_STATIC, "static");
+	expect_keyword(&lx, TOKEN_KW_CONST, "const");
+	expect_keyword(&lx, TOKEN_KW_CHAR, "char");
+	expect_kind(&lx, TOKEN_STAR);
+	expect_ident(&lx, "title");
+	expect_kind(&lx, TOKEN_ASSIGN);
+	expect_str_plain(&lx, "Hello world");
+	expect_kind(&lx, TOKEN_SEMICOLON);
+
+	expect_keyword(&lx, TOKEN_KW_STATIC, "static");
+	{
+		int found_main = 0;
+		struct token prevtok = {0}, t = {0};
+		while (!found_main) {
+			prevtok = t;
+			t = next_tok(&lx);
+			if (t.kind == TOKEN_EOF)
+				ASSERT(!"unexpected EOF before main");
+			if (prevtok.kind == TOKEN_KW_INT && t.kind == TOKEN_IDENTIFIER && t.val.str &&
+				strcmp(t.val.str, "main") == 0) {
+				found_main = 1;
+			}
+		}
+	}
+
+	expect_kind(&lx, TOKEN_LPAREN);
+	expect_keyword(&lx, TOKEN_KW_VOID, "void");
+	expect_kind(&lx, TOKEN_RPAREN);
+	expect_kind(&lx, TOKEN_LBRACE);
+
+	expect_keyword(&lx, TOKEN_KW_INT, "int");
+	expect_ident(&lx, "i");
+	expect_kind(&lx, TOKEN_ASSIGN);
+	expect_int_s(&lx, 0, TOKEN_INT_BASE_10);
+	expect_kind(&lx, TOKEN_SEMICOLON);
+
+	expect_keyword(&lx, TOKEN_KW_FOR, "for");
+	expect_kind(&lx, TOKEN_LPAREN);
+	expect_keyword(&lx, TOKEN_KW_INT, "int");
+	expect_ident(&lx, "s");
+	expect_kind(&lx, TOKEN_ASSIGN);
+	expect_int_s(&lx, 0, TOKEN_INT_BASE_10);
+	expect_kind(&lx, TOKEN_SEMICOLON);
+	expect_ident(&lx, "s");
+	expect_kind(&lx, TOKEN_LT);
+	expect_int_s(&lx, 3, TOKEN_INT_BASE_10);
+	expect_kind(&lx, TOKEN_SEMICOLON);
+	expect_kind(&lx, TOKEN_PLUS_PLUS);
+	expect_ident(&lx, "s");
+	expect_kind(&lx, TOKEN_RPAREN);
+	expect_kind(&lx, TOKEN_LBRACE);
+	expect_ident(&lx, "i");
+	expect_kind(&lx, TOKEN_PLUS_ASSIGN);
+	expect_ident(&lx, "square");
+	expect_kind(&lx, TOKEN_LPAREN);
+	expect_ident(&lx, "s");
+	expect_kind(&lx, TOKEN_RPAREN);
+	expect_kind(&lx, TOKEN_SEMICOLON);
+	expect_kind(&lx, TOKEN_RBRACE);
+
+	expect_keyword(&lx, TOKEN_KW_IF, "if");
+	expect_kind(&lx, TOKEN_LPAREN);
+	expect_ident(&lx, "i");
+	expect_kind(&lx, TOKEN_GT);
+	expect_int_s(&lx, 0, TOKEN_INT_BASE_10);
+	expect_kind(&lx, TOKEN_RPAREN);
+	expect_kind(&lx, TOKEN_LBRACE);
+	expect_ident(&lx, "LOG");
+	expect_kind(&lx, TOKEN_LPAREN);
+	expect_str_plain(&lx, "i=%d\n");
+	{
+		int closed = 0;
+		while (!closed) {
+			struct token t = next_tok(&lx);
+			if (t.kind == TOKEN_SEMICOLON) {
+				expect_kind(&lx, TOKEN_RBRACE);
+				closed = 1;
+				break;
+			}
+			if (t.kind == TOKEN_EOF)
+				ASSERT(!"unexpected EOF in if-body");
+		}
+	}
+	expect_keyword(&lx, TOKEN_KW_ELSE, "else");
+	expect_kind(&lx, TOKEN_LBRACE);
+	expect_ident(&lx, "LOG");
+	expect_kind(&lx, TOKEN_LPAREN);
+	expect_str_plain(&lx, "zero\n");
+	{
+		int closed = 0;
+		while (!closed) {
+			struct token t = next_tok(&lx);
+			if (t.kind == TOKEN_RBRACE) {
+				closed = 1;
+				break;
+			}
+			if (t.kind == TOKEN_EOF)
+				ASSERT(!"unexpected EOF in else-body");
+		}
+	}
+
+	expect_keyword(&lx, TOKEN_KW_SWITCH, "switch");
+	expect_kind(&lx, TOKEN_LPAREN);
+	expect_ident(&lx, "i");
+	expect_kind(&lx, TOKEN_RPAREN);
+	expect_kind(&lx, TOKEN_LBRACE);
+
+	expect_keyword(&lx, TOKEN_KW_CASE, "case");
+	expect_int_s(&lx, 0, TOKEN_INT_BASE_10);
+	expect_kind(&lx, TOKEN_COLON);
+	expect_ident(&lx, "i");
+	expect_kind(&lx, TOKEN_ASSIGN);
+	expect_kind(&lx, TOKEN_MINUS);
+	expect_int_s(&lx, 1, TOKEN_INT_BASE_10);
+	expect_kind(&lx, TOKEN_SEMICOLON);
+	expect_keyword(&lx, TOKEN_KW_BREAK, "break");
+	expect_kind(&lx, TOKEN_SEMICOLON);
+
+	expect_keyword(&lx, TOKEN_KW_CASE, "case");
+	expect_int_s(&lx, 1, TOKEN_INT_BASE_10);
+	expect_kind(&lx, TOKEN_COLON);
+	expect_ident(&lx, "i");
+	expect_kind(&lx, TOKEN_ASSIGN);
+	expect_kind(&lx, TOKEN_PLUS);
+	expect_int_s(&lx, 1, TOKEN_INT_BASE_10);
+	expect_kind(&lx, TOKEN_SEMICOLON);
+	expect_keyword(&lx, TOKEN_KW_BREAK, "break");
+	expect_kind(&lx, TOKEN_SEMICOLON);
+
+	expect_keyword(&lx, TOKEN_KW_DEFAULT, "default");
+	expect_kind(&lx, TOKEN_COLON);
+	expect_ident(&lx, "i");
+	expect_kind(&lx, TOKEN_ASSIGN);
+	expect_int_s(&lx, 42, TOKEN_INT_BASE_10);
+	expect_kind(&lx, TOKEN_SEMICOLON);
+	expect_keyword(&lx, TOKEN_KW_BREAK, "break");
+	expect_kind(&lx, TOKEN_SEMICOLON);
+
+	expect_kind(&lx, TOKEN_RBRACE);
+
+	expect_keyword(&lx, TOKEN_KW_RETURN, "return");
+	expect_ident(&lx, "i");
+	expect_kind(&lx, TOKEN_SEMICOLON);
+	expect_kind(&lx, TOKEN_RBRACE);
+
+	expect_kind(&lx, TOKEN_EOF);
+
+	lexer_destroy(&lx);
+	free(p);
+	yecc_context_destroy(&ctx);
+}
+
 int main(void) {
 	setvbuf(stdout, nullptr, _IONBF, 0);
 	g_tmpdir = mkdtemp(tmpdir_template);
@@ -1437,6 +1816,8 @@ int main(void) {
 	RUN(test_line_splice_in_identifier_many_times);
 	RUN(test_comment_edge_patterns);
 	RUN(test_peek_preproc_long_lookahead_boundaries);
+	RUN(test_small_complete_program);
+	RUN(test_large_program);
 
 	puts("\nAll tests passed successfully!");
 
