@@ -42,6 +42,7 @@ enum yecc_warning {
 	YECC_W_PEDANTIC,
 	YECC_W_UNREACHABLE_CODE,
 	YECC_W_DEPRECATED,
+	YECC_W_STRING_WIDTH_PROMOTION,
 	YECC_W_COUNT
 };
 
@@ -129,6 +130,8 @@ struct yecc_context {
 	unsigned long long cpu_features_enable_mask;  /* feature allow-list */
 	unsigned long long cpu_features_disable_mask; /* explicit disable overrides */
 
+	unsigned wchar_bits; /* 8 = UTF-8, 16 = UTF-16, 32 = UTF-32 */
+
 	/* standard libraries and link policy */
 	bool use_standard_includes; /* inject default system include set */
 	bool nostdlib;				/* do not link startup files or stdlibs */
@@ -190,6 +193,8 @@ void yecc_context_set_tune(struct yecc_context *ctx, const char *tune);
 void yecc_context_enable_feature(struct yecc_context *ctx, enum yecc_cpu_feature f, bool on);
 void yecc_context_disable_feature(struct yecc_context *ctx, enum yecc_cpu_feature f, bool on);
 
+void yecc_context_set_wchar_bits(struct yecc_context *ctx, unsigned bits);
+
 void yecc_context_set_use_standard_includes(struct yecc_context *ctx, bool on);
 void yecc_context_set_nostdlib(struct yecc_context *ctx, bool on);
 void yecc_context_set_nodefaultlibs(struct yecc_context *ctx, bool on);
@@ -211,8 +216,8 @@ void yecc_context_set_trace_sema(struct yecc_context *ctx, bool on);
 void yecc_context_set_trace_ir(struct yecc_context *ctx, bool on);
 void yecc_context_set_trace_codegen(struct yecc_context *ctx, bool on);
 
-void yecc_warning_enable(struct yecc_context *ctx, enum yecc_warning w, bool on);
-void yecc_warning_as_error(struct yecc_context *ctx, enum yecc_warning w, bool on);
+void yecc_context_warning_enable(struct yecc_context *ctx, enum yecc_warning w, bool on);
+void yecc_context_make_warning_as_error(struct yecc_context *ctx, enum yecc_warning w, bool on);
 
 const char *yecc_lang_standard_name(enum yecc_lang_standard std);
 const char *yecc_opt_level_name(enum yecc_opt_level lvl);

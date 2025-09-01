@@ -1,3 +1,4 @@
+#include <assert.h>
 #include <context.h>
 #include <string.h>
 #include <utils.h>
@@ -40,6 +41,8 @@ void yecc_context_init(struct yecc_context *ctx) {
 	ctx->tune = nullptr;
 	ctx->cpu_features_enable_mask = 0ull;
 	ctx->cpu_features_disable_mask = 0ull;
+
+	ctx->wchar_bits = 32;
 
 	ctx->use_standard_includes = true;
 	ctx->nostdlib = false;
@@ -103,7 +106,7 @@ void yecc_context_set_warnings_as_errors(struct yecc_context *ctx, bool on) {
 void yecc_context_set_pedantic(struct yecc_context *ctx, bool on) {
 	if (ctx) {
 		ctx->pedantic = on;
-		yecc_warning_enable(ctx, YECC_W_PEDANTIC, true);
+		yecc_context_warning_enable(ctx, YECC_W_PEDANTIC, true);
 	}
 }
 
@@ -176,6 +179,12 @@ void yecc_context_disable_feature(struct yecc_context *ctx, enum yecc_cpu_featur
 	if (!ctx)
 		return;
 	set_bit_u64(&ctx->cpu_features_disable_mask, (unsigned)f, on);
+}
+
+void yecc_context_set_wchar_bits(struct yecc_context *ctx, unsigned bits) {
+	assert((bits == 8 || bits == 16 || bits == 32) && "Only UTF-8, UTF-16 and UTF-32 are valid wchar bit options!");
+	if (ctx)
+		ctx->wchar_bits = bits;
 }
 
 void yecc_context_set_use_standard_includes(struct yecc_context *ctx, bool on) {
@@ -257,12 +266,12 @@ void yecc_context_set_trace_codegen(struct yecc_context *ctx, bool on) {
 		ctx->trace_codegen = on;
 }
 
-void yecc_warning_enable(struct yecc_context *ctx, enum yecc_warning w, bool on) {
+void yecc_context_warning_enable(struct yecc_context *ctx, enum yecc_warning w, bool on) {
 	if (!ctx)
 		return;
 	set_bit_u32(&ctx->warning_enabled_mask, (unsigned)w, on);
 }
-void yecc_warning_as_error(struct yecc_context *ctx, enum yecc_warning w, bool on) {
+void yecc_context_make_warning_as_error(struct yecc_context *ctx, enum yecc_warning w, bool on) {
 	if (!ctx)
 		return;
 	set_bit_u32(&ctx->warning_error_mask, (unsigned)w, on);
