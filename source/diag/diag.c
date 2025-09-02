@@ -1,5 +1,5 @@
-#include <context.h>
-#include <diag.h>
+#include <context/context.h>
+#include <diag/diag.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>

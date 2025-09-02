@@ -1,5 +1,5 @@
-#include "diag.h"
-#include "streamer.h"
+#include "base/streamer.h"
+#include "diag/diag.h"
 #include <assert.h>
 #include <limits.h>
 #include <stdint.h>

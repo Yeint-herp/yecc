@@ -1,7 +1,7 @@
-#include "context.h"
-#include "lexer.h"
-#include "print.h"
-#include "token.h"
+#include "context/context.h"
+#include "context/print.h"
+#include "lex/lexer.h"
+#include "lex/token.h"
 #include <assert.h>
 #include <limits.h>
 #include <math.h>

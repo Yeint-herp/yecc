@@ -1,8 +1,8 @@
-#include <arena.h>
 #include <assert.h>
-#include <map.h>
+#include <base/arena.h>
+#include <base/map.h>
+#include <base/string_intern.h>
 #include <string.h>
-#include <string_intern.h>
 
 /* struct holding a key in the string interner hashmap */
 struct string_intern_key {

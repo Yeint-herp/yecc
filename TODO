@@ -1,4 +1,5 @@
-- [ ] Rewrite compiler module design into a amodular multi-executable compiler.
+- [X] Rewrite compiler module design into a modular multi-executable compiler.
+- [ ] Rewrite the tests system.
 - [ ] Rewrite compiler context module.
 - [ ] Document arena.c
 - [ ] Document diag.c

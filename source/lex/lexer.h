@@ -1,13 +1,13 @@
 #ifndef LEXER_H
 #define LEXER_H
 
-#include <context.h>
-#include <diag.h>
+#include <base/streamer.h>
+#include <base/string_intern.h>
+#include <base/vector.h>
+#include <context/context.h>
+#include <diag/diag.h>
+#include <lex/token.h>
 #include <stdbool.h>
-#include <streamer.h>
-#include <string_intern.h>
-#include <token.h>
-#include <vector.h>
 
 enum yecc_pp_kind {
 	YECC_PP_NONE = 0,

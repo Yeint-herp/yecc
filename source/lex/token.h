@@ -1,9 +1,9 @@
 #ifndef TOKEN_H
 #define TOKEN_H
 
+#include <base/streamer.h>
 #include <stdbool.h>
 #include <stdint.h>
-#include <streamer.h>
 #include <uchar.h>
 #include <wchar.h>
 

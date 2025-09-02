@@ -1,11 +1,10 @@
 #ifndef PRINT_H
 #define PRINT_H
 
-#include <diag.h>
+#include <base/streamer.h>
+#include <lex/token.h>
 #include <stdio.h>
-#include <streamer.h>
 #include <string.h>
-#include <token.h>
 
 const char *token_kind_name(enum token_kind k);
 

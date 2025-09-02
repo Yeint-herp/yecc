@@ -1,8 +1,8 @@
 #include <assert.h>
-#include <context.h>
+#include <base/utils.h>
+#include <base/vector.h>
+#include <context/context.h>
 #include <string.h>
-#include <utils.h>
-#include <vector.h>
 
 void yecc_context_init(struct yecc_context *ctx) {
 	if (!ctx)

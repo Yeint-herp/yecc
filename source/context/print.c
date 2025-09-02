@@ -4,9 +4,9 @@
 #include <uchar.h>
 #include <wchar.h>
 
-#include <print.h>
-#include <streamer.h>
-#include <token.h>
+#include <base/streamer.h>
+#include <context/print.h>
+#include <lex/token.h>
 
 static void dump_flags_inner(unsigned f, char *out, size_t n);
 

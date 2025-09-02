@@ -1,11 +1,11 @@
 #ifndef DIAG_H
 #define DIAG_H
 
-#include <context.h>
+#include <base/streamer.h>
+#include <context/context.h>
 #include <stdarg.h>
 #include <stdbool.h>
 #include <stddef.h>
-#include <streamer.h>
 
 /**
  * diag.h

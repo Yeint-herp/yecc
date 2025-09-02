@@ -1,18 +1,18 @@
-#include <context.h>
+#include <base/streamer.h>
+#include <base/string_intern.h>
+#include <base/vector.h>
+#include <context/context.h>
 #include <ctype.h>
-#include <diag.h>
+#include <diag/diag.h>
 #include <errno.h>
-#include <lexer.h>
+#include <lex/lexer.h>
+#include <lex/token.h>
 #include <limits.h>
 #include <locale.h>
 #include <stdarg.h>
 #include <stdlib.h>
-#include <streamer.h>
 #include <string.h>
-#include <string_intern.h>
-#include <token.h>
 #include <uchar.h>
-#include <vector.h>
 #include <wchar.h>
 
 static void diag_extension(struct lexer *lx, struct source_span sp, const char *fmt, ...) {

@@ -1,9 +1,9 @@
 #ifndef CONTEXT_H
 #define CONTEXT_H
 
+#include <base/vector.h>
 #include <stdbool.h>
 #include <stddef.h>
-#include <vector.h>
 
 /* language standard the front-end should adhere to. */
 enum yecc_lang_standard {
