@@ -15,7 +15,7 @@
 
 static bool diag_use_color = false;
 static int diag_hard_error_count = 0;
-static struct yecc_context *diag_ctx;
+static struct yecc_context *diag_ctx = nullptr;
 
 static const char *lvl_str(diag_level l) {
 	switch (l) {
