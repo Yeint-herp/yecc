@@ -6,6 +6,7 @@
 #include <diag/diag.h>
 #include <errno.h>
 #include <lex/lexer.h>
+#include <lex/string_concat.h>
 #include <lex/token.h>
 #include <limits.h>
 #include <locale.h>
@@ -106,52 +107,6 @@ static bool utf8_decode_one(struct streamer *s, uint32_t *out_cp) {
 
 	*out_cp = cp;
 	return true;
-}
-
-enum lit_kind { LIT_PLAIN = 0, LIT_UTF8 = 1, LIT_UTF16 = 2, LIT_UTF32 = 3, LIT_WIDE = 4 };
-
-struct lit_info {
-	enum lit_kind kind;
-	unsigned rank;
-	const char *name;
-	unsigned unit_bits;
-};
-
-static inline struct lit_info lit_info_of(enum lit_kind k, const struct yecc_context *ctx) {
-	switch (k) {
-	case LIT_PLAIN:
-		return (struct lit_info){k, 0, "plain", 8};
-	case LIT_UTF8:
-		return (struct lit_info){k, 1, "u8", 8};
-	case LIT_UTF16:
-		return (struct lit_info){k, 2, "u", 16};
-	case LIT_UTF32:
-		return (struct lit_info){k, 3, "U", 32};
-	case LIT_WIDE:
-		return (struct lit_info){k, 4, "L", (ctx && ctx->wchar_bits ? ctx->wchar_bits : 32)};
-	}
-	return (struct lit_info){LIT_PLAIN, 0, "plain", 8};
-}
-
-static inline enum lit_kind lit_promote(enum lit_kind a, enum lit_kind b, const struct yecc_context *ctx,
-										bool *out_widened) {
-	struct lit_info A = lit_info_of(a, ctx), B = lit_info_of(b, ctx);
-	if (out_widened)
-		*out_widened = (A.rank != (A.rank > B.rank ? A.rank : B.rank));
-	return (A.rank >= B.rank) ? a : b;
-}
-
-static inline void diag_promotion(struct lexer *lx, struct source_span sp, enum lit_kind from, enum lit_kind to) {
-	if (from == to)
-		return;
-	if (!yecc_context_warning_enabled(lx->ctx, YECC_W_STRING_WIDTH_PROMOTION))
-		return;
-	if (lx->ctx->warnings_as_errors && yecc_context_warning_as_error(lx->ctx, YECC_W_STRING_WIDTH_PROMOTION))
-		diag_error(sp, "string literal concatenation promotes from %s to %s", lit_info_of(from, lx->ctx).name,
-				   lit_info_of(to, lx->ctx).name);
-	else
-		diag_warning(sp, "string literal concatenation promotes from %s to %s", lit_info_of(from, lx->ctx).name,
-					 lit_info_of(to, lx->ctx).name);
 }
 
 static inline uint32_t target_wchar_max(const struct yecc_context *ctx) {
@@ -1538,7 +1493,7 @@ static uint32_t parse_escape(struct lexer *lx, enum lit_kind lk) {
 	}
 }
 
-static struct token read_string_literal(struct lexer *lx) {
+static struct token read_string_literal_single(struct lexer *lx) {
 	struct source_position start = streamer_position(&lx->s);
 
 	enum lit_kind prefix = LIT_PLAIN;
@@ -1618,84 +1573,6 @@ static struct token read_string_literal(struct lexer *lx) {
 		struct source_position p = streamer_position(&lx->s);
 		diag_error((struct source_span){start, p}, "unterminated string literal");
 		skip_to_safe_point(lx);
-	}
-
-	for (;;) {
-		skip_space_and_comments(lx);
-
-		struct streamer_blob b2 = streamer_get_blob(&lx->s);
-		bool np = (b2.cache[2] == '"');
-		bool n8 = (b2.cache[2] == 'u' && b2.cache[3] == '8' && b2.cache[4] == '"');
-		bool n16 = (b2.cache[2] == 'u' && b2.cache[3] == '"');
-		bool n32 = (b2.cache[2] == 'U' && b2.cache[3] == '"');
-		bool nw = (b2.cache[2] == 'L' && b2.cache[3] == '"');
-
-		if (!np && !n8 && !n16 && !n32 && !nw)
-			break;
-
-		enum lit_kind next_kind = np ? LIT_PLAIN : n8 ? LIT_UTF8 : n16 ? LIT_UTF16 : n32 ? LIT_UTF32 : LIT_WIDE;
-		enum lit_kind promoted = lit_promote(prefix, next_kind, lx->ctx, nullptr);
-		if (promoted != prefix) {
-			diag_promotion(lx, (struct source_span){start, streamer_position(&lx->s)}, prefix, promoted);
-			prefix = promoted;
-		}
-
-		if (next_kind == LIT_UTF8) {
-			if (!(yecc_std_at_least(lx->ctx, YECC_LANG_C23) || (lx->ctx->gnu_extensions))) {
-				struct source_position p = streamer_position(&lx->s);
-				diag_extension(lx, (struct source_span){p, p}, "u8 string literal requires C23 or GNU extensions");
-			}
-			NEXT(lx);
-			NEXT(lx);
-		} else if (next_kind == LIT_UTF16 || next_kind == LIT_UTF32 || next_kind == LIT_WIDE) {
-			NEXT(lx);
-		}
-		if (NEXT(lx) != '"')
-			break;
-
-		while (!streamer_eof(&lx->s)) {
-			int c = NEXT(lx);
-			if (c == '"')
-				break;
-			if (c == '\\') {
-				int pk = streamer_peek(&lx->s);
-				if (prefix == LIT_PLAIN && (pk == 'u' || pk == 'U')) {
-					struct source_position p = streamer_position(&lx->s);
-					diag_error((struct source_span){p, p}, "\\u/\\U not allowed in plain string literal");
-				}
-				uint32_t v = parse_escape(lx, prefix);
-				if (prefix == LIT_PLAIN)
-					v &= 0xFF;
-				vector_push(&cps, v);
-			} else {
-				if (prefix == LIT_PLAIN) {
-					if ((unsigned char)c >= 0x80) {
-						struct source_position p = streamer_position(&lx->s);
-						diag_error((struct source_span){p, p}, "non-ASCII byte in plain string literal");
-						vector_push(&cps, (uint32_t)'?');
-					} else {
-						vector_push(&cps, (uint8_t)c);
-					}
-				} else {
-					if ((unsigned char)c < 0x80) {
-						vector_push(&cps, (uint8_t)c);
-					} else {
-						streamer_unget(&lx->s);
-						uint32_t cp = 0;
-						if (!utf8_decode_one(&lx->s, &cp))
-							cp = 0xFFFD;
-						vector_push(&cps, cp);
-					}
-				}
-			}
-		}
-
-		if (streamer_eof(&lx->s) && PEEK(lx) != '"') {
-			struct source_position p = streamer_position(&lx->s);
-			diag_error((struct source_span){start, p}, "unterminated string literal in concatenation");
-			skip_to_safe_point(lx);
-			break;
-		}
 	}
 
 	struct token tok = {.loc.start = start};
@@ -1822,6 +1699,49 @@ static struct token read_string_literal(struct lexer *lx) {
 	tok.loc.end = streamer_position(&lx->s);
 	vector_destroy(&cps);
 	return tok;
+}
+
+static struct token read_string_literal(struct lexer *lx) {
+	struct token acc = read_string_literal_single(lx);
+	if (acc.kind != TOKEN_STRING_LITERAL)
+		return acc;
+
+	for (;;) {
+		struct source_position saved = streamer_position(&lx->s);
+
+		skip_space_and_comments(lx);
+
+		struct streamer_blob b2 = streamer_get_blob(&lx->s);
+		bool np = (b2.cache[2] == '"');
+		bool n8 = (b2.cache[2] == 'u' && b2.cache[3] == '8' && b2.cache[4] == '"');
+		bool n16 = (b2.cache[2] == 'u' && b2.cache[3] == '"');
+		bool n32 = (b2.cache[2] == 'U' && b2.cache[3] == '"');
+		bool nw = (b2.cache[2] == 'L' && b2.cache[3] == '"');
+
+		if (!(np || n8 || n16 || n32 || nw)) {
+			streamer_seek(&lx->s, saved.offset);
+			break;
+		}
+
+		struct token nxt = read_string_literal_single(lx);
+		if (nxt.kind != TOKEN_STRING_LITERAL) {
+			break;
+		}
+
+		struct token merged = {0};
+		struct source_span span = {.start = acc.loc.start, .end = nxt.loc.end};
+
+		if (!lex_concat_string_pair(lx->ctx, &acc, &nxt, span, &merged)) {
+			break;
+		}
+
+		merged.loc.start = acc.loc.start;
+		merged.loc.end = nxt.loc.end;
+
+		acc = merged;
+	}
+
+	return acc;
 }
 
 static struct token read_char_literal(struct lexer *lx) {

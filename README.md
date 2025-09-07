@@ -48,7 +48,8 @@ Chronological and logical order of modules of the compiler:
 - File streamer module: `streamer.c` `streamer.h`
 - Error diagnostics module: `diag.h` `diag.c`
 - Token module: `token.h`
-- Lexer module `lexer.h` `lexer.c`
-- Debug printing module `print.h` `print.c`
+- String concatenation and promotion module `lex/string_concat.c` `lex/string_concat.h`
+- Lexer module `lex/lexer.h` `lex/lexer.c`
 
+- Debug printing module `print.h` `print.c`
 The formatting module `print.h` is special as it provides formatting functionality for all other modules and can be called into by any when human readable serialization is needed.
