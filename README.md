@@ -38,18 +38,18 @@
 * **No typedef for structs**
 
 Chronological and logical order of modules of the compiler:
-- Utilities module `utils.h`
-- Arena allocator module: `arena.h` `arena.c`
-- Hashmap module: `map.h`
-- Vector (dynamic array) module: `vector.h`
-- Deque module: `deque.h`
-- Compiler global state context module `context.h` `context.c`
-- String interner module: `string_intern.h` `string_intern.c`
-- File streamer module: `streamer.c` `streamer.h`
-- Error diagnostics module: `diag.h` `diag.c`
-- Token module: `token.h`
+- Utilities module `base/utils.h`
+- Arena allocator module: `base/arena.h` `base/arena.c`
+- Hashmap module: `base/map.h`
+- Vector (dynamic array) module: `base/vector.h`
+- Deque module: `base/deque.h`
+- Compiler global state context module `context/context.h` `context/context.c`
+- String interner module: `base/string_intern.h` `base/string_intern.c`
+- File streamer module: `base/streamer.c` `base/streamer.h`
+- Error diagnostics module: `diag/diag.h` `diag/diag.c`
+- Token module: `lex/token.h`
 - String concatenation and promotion module `lex/string_concat.c` `lex/string_concat.h`
 - Lexer module `lex/lexer.h` `lex/lexer.c`
 
-- Debug printing module `print.h` `print.c`
-The formatting module `print.h` is special as it provides formatting functionality for all other modules and can be called into by any when human readable serialization is needed.
+- Debug printing module `context/print.h` `context/print.c`
+The formatting module `context/print.h` is special as it provides formatting functionality for all other modules and can be called into by any when human readable serialization is needed.
