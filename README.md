@@ -17,6 +17,7 @@
 
   * Code is intentionally kept simple and idiomatic, avoiding clever tricks or overly abstract patterns.
   * Naming is descriptive, and internal APIs are documented to reduce cognitive load for newcomers.
+  * Comments describe high level logic not immediately understandable from code. They are not overly verbose.
 
 * **Explicit Data Flow**
 
@@ -28,7 +29,7 @@
 * **Educational Transparency**
 
   * All major structures (symbol tables, error reporting, type system) and internal utilities (hashmaps, streamers, interners) are implemented from scratch and exposed in the codebase.
-  * Internals are not hidden behind libraries or opaque abstractions, making the learning process hands-on.
+  * Internals are not hidden behind libraries or opaque abstractions.
 
 * **Error-Tolerant by Design**
 
